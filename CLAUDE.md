@@ -86,13 +86,12 @@ wrapper from memory of the API.
   `current_page`. `list_releases` filters `since` and `until` on the printed date of
   `release_datetime`, never converted, and its `meta.total` is upstream's count before
   that filter. `get_latest_release` takes the latest `release_datetime` of page 0,
-  never the highest id. `meta.request` omits what the caller left `None`. `MCP_CAPS`
-  caps `list_publications` alone, at 3000 rows or 720,000 bytes, sized to return its
-  whole table (599,402 bytes of compact JSON, measured on 2026-10-27); the default cap
-  (200 rows or 64 KB) can cut two tools called without `page`: `list_releases` (703 rows
-  for WASDE) and a broad `search_publications` (about 1.8 KB a publication, so after
-  some 36 matches). Their docstrings tell an agent to page, `list_releases`'s also to
-  bound the call with `since` and `until`.
+  never the highest id. `meta.request` omits what the caller left `None`. Every tool keeps
+  the default cap (200 rows or 64 KB); `MCP_CAPS` gives `list_publications` a note of its
+  own (next item). The default can cut two tools called without `page`: `list_releases`
+  (703 rows for WASDE) and a broad `search_publications` (about 1.8 KB a publication, so
+  after some 36 matches). Their docstrings tell an agent to page, `list_releases`'s also
+  to bound the call with `since` and `until`.
 - **The packaged tables.** `reference/publication.json` (2522 publications, each the
   eight columns of `PublicationRow`, a projection of `Publication`) and
   `reference/agency.json` (9 agencies, every field) are `PackagedList` files, written by
@@ -101,9 +100,16 @@ wrapper from memory of the API.
   without a request, `meta` from `PackagedList.meta` (`retrieved_at` the table's
   `fetched`, `endpoint` `esmis_api_publication_findAll`, ADR-0022), and refuses an
   `agency_acronym` the agency table lacks with core's `UnknownCode`; `list_agencies`
-  stays live. No enum is generated from them (`enums.py` stays as the scaffold rendered
-  it, the document's enums are hand-written in `models.py`) and `params.PACKAGED_LISTS`
-  stays empty. The refresh budget: 102 keyless requests (the agencies, then
+  stays live. Decided by Johannes on 2026-10-27: its MCP tool keeps the default cap, 200
+  rows or 64 KB, with a note naming `search` and `agency_acronym` and that Python and
+  HTTP callers get the whole table; unfiltered the result is 599,402 bytes of compact
+  JSON, about 150k tokens, so an agent filters it, as with sdk-comtrade's HS list, and is
+  never served it whole (ADR-0016). No enum is generated from the tables (`enums.py`
+  holds none, the document's enums are hand-written in `models.py`) and
+  `params.PACKAGED_LISTS` stays empty. The template's `/refresh-reference-data` command
+  still describes value lists and their renderers; `scripts/refresh_reference.py`'s
+  docstring is the recipe for this package until the template adoption. The refresh
+  budget: 102 keyless requests (the agencies, then
   `/publication/findAll` pages 0 to 100, bounded by `total_pages`) at 30 a minute, about
   four minutes, run once, in a refresh PR of its own before each release (Workflow
   rules); the script refuses to write a walk whose pages disagree. The nightly live
@@ -163,8 +169,9 @@ src/xippios/usda/esmis/
   http.py          FastAPI router
   params.py        packaged value lists: PACKAGED_LISTS, packaged_values(); empty here,
                    the packaged tables are PackagedList files tasks.py reads
-  enums.py         empty, as the scaffold rendered it: no enum is generated from the
-                   tables; the document's enums are hand-written in models.py
+  enums.py         no enum: no packaged value list, nothing generated; the document's
+                   enums are in models.py; a value list packaged later renders here
+                   through core's render_enums
   reference/       publication.json and agency.json, PackagedList files, plus README with
                    provenance
 scripts/

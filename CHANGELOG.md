@@ -56,8 +56,9 @@ All notable changes to this project are documented here. The format follows
   id, an identifier or the title (core's `matches`), `agency_acronym` an acronym the row
   lists, and an acronym the packaged agency table lacks is refused with core's
   `UnknownCode`, naming the closest. `meta.retrieved_at` is the table's fetch time and
-  `meta.endpoint` `esmis_api_publication_findAll` (ADR-0022). Its MCP tool has a cap of
-  its own, 3000 rows or 720,000 bytes, sized to return the whole table (ADR-0016). Live
+  `meta.endpoint` `esmis_api_publication_findAll` (ADR-0022). Its MCP tool keeps the
+  default cap, 200 rows or 64 KB, with a note naming the two filters, since the whole
+  table is 599,402 bytes; Python and HTTP callers get the whole table (ADR-0016). Live
   tests compare the packaged agencies and the publication count with upstream.
 
 ### Changed

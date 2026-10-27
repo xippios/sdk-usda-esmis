@@ -18,7 +18,8 @@ What every task follows:
   caller gave, none left ``None`` (ADR-0022), and for the download also the file's ``url``.
   ``meta.total`` is ``pager.total_results`` of the last page fetched for the two paged
   list tasks (ADR-0012), ``None`` elsewhere.
-  ``meta.retrieved_at`` is when the answer arrived: the client keeps no cache.
+  ``meta.retrieved_at`` is when the answer arrived for the tasks that ask upstream: the
+  client keeps no cache; ``list_publications`` carries the packaged table's ``fetched``.
 - The packaged answer: ``list_publications`` answers from ``reference/publication.json``,
   the table ``scripts/refresh_reference.py`` wrote from every page of
   ``esmis_api_publication_findAll``, and checks its ``agency_acronym`` against
@@ -44,8 +45,9 @@ What every task follows:
   at noon Eastern, so the time is upstream's text; no zone is attached and no time
   converted. ``Release`` keeps the value as printed; the list tasks leave
   ``meta.published_at`` empty.
-- A catalog, never a parser (ADR-0020): no task reads a file's contents, and nothing is
-  stored or cached; ``download_release_file`` writes where the caller says.
+- A catalog, never a parser (ADR-0020): no task reads a released file's contents, and no
+  answer from upstream is stored or cached; ``download_release_file`` writes where the
+  caller says. Core's ``load_json`` caches the text of the packaged tables per process.
 """
 
 from collections.abc import Awaitable, Callable, Mapping
@@ -97,25 +99,26 @@ BULK_TASKS = frozenset({"download_release_file"})
 """Tasks the adapters skip (ADR-0019, decision 4): they write a file, which no tool or
 route hands out. Hand-written until the template renders it (template v0.3.0)."""
 
-# One tool gets a result cap of its own (conventions §8, ADR-0016; decided by Johannes on
-# 2026-10-27, sized to the table): list_publications returns the whole packaged table
-# when called without a filter, 2522 rows fetched on 2026-10-27, whose result, envelope
-# included, measured 599,402 bytes of compact JSON (UTF-8, as cap_result counts them);
-# 3000 rows and 720,000 bytes leave about a fifth for the table to grow before the
-# next refresh. Its note names the two filters. Every other tool keeps the default 200
-# rows or 64 KB: list_agencies answers 9 rows and list_release_files at most 4 files as
-# recorded. Two tools called without page can exceed it: list_releases answers hundreds
-# of rows (703 for WASDE), and search_publications every match of a keyword, about 1.8 KB
-# a publication as the WASDE matches average (0.6 KB on publication_find_all's page 0),
-# so 64 KB can cut a broad keyword's list after some 36; a page of 25 fits at those sizes
-# (about 45 KB). The default cap applies to both, with its note, and their docstrings
-# tell an agent to page, list_releases's also to bound the call with since and until.
+# One tool has an entry, the family default cap with a note of its own (conventions §8,
+# ADR-0016; decided by Johannes on 2026-10-27): list_publications keeps 200 rows or
+# 64 KB, and its note names its two filters. Unfiltered it answers the whole packaged
+# table, 2522 rows fetched on 2026-10-27, whose result, envelope included, measured
+# 599,402 bytes of compact JSON (UTF-8, as cap_result counts them), about 150k tokens:
+# too much for one tool result, so, as with sdk-comtrade's HS list, an agent filters it
+# with search and is never served it whole; Python and HTTP callers get the whole table.
+# Every other tool keeps the default and its note: list_agencies answers 9 rows and
+# list_release_files at most 4 files as recorded. Two tools called without page can
+# exceed it: list_releases answers hundreds of rows (703 for WASDE), and
+# search_publications every match of a keyword, about 1.8 KB a publication as the WASDE
+# matches average (0.6 KB on publication_find_all's page 0), so 64 KB can cut a broad
+# keyword's list after some 36; a page of 25 fits at those sizes (about 45 KB). The
+# default cap applies to both, with its note, and their docstrings tell an agent to page,
+# list_releases's also to bound the call with since and until.
 MCP_CAPS: Mapping[str, ResultCap] = {
     "list_publications": ResultCap(
-        max_rows=3000,
-        max_bytes=720_000,
         note="filter with search (text of an id, an identifier or a title) or agency_acronym "
-        "(as list_agencies spells it) to see the rest",
+        "(as list_agencies spells it) to see the rest; Python and HTTP callers get the whole "
+        "table",
     ),
 }
 
@@ -253,9 +256,10 @@ async def list_publications_async(
     keeps a publication's ``id``, ``identifier``, ``title``, ``agency_acronym``,
     ``publication_agency_export_1``, ``frequency``, ``status`` and ``resource_type``, in
     upstream order; its ``identifier`` values are what ``get_publication``,
-    ``list_releases`` and ``get_latest_release`` take (pass one without ``/``). Called
-    without a filter the MCP tool returns the whole table, about 600 KB: filter where you
-    can. ``meta.retrieved_at`` is when the table was fetched, ``meta.endpoint`` the
+    ``list_releases`` and ``get_latest_release`` take (pass one without ``/``). The MCP
+    tool returns at most 200 rows or 64 KB, the first 200 of 2522 when called without a
+    filter: filter with ``search`` or ``agency_acronym``; Python and HTTP callers get the
+    whole table. ``meta.retrieved_at`` is when the table was fetched, ``meta.endpoint`` the
     operation it came from. An ``agency_acronym`` the packaged agency table lacks raises
     ``InvalidRequestError`` naming the closest acronyms.
 

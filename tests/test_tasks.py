@@ -250,19 +250,24 @@ def test_publication_row_is_a_projection_of_publication() -> None:
         assert_projection(PublicationRow.project(publication), publication)
 
 
-def test_the_cap_of_list_publications_returns_the_whole_table() -> None:
+CAP_NOTE = (
+    "showing 200 of 2522 rows (cap: 200 rows or 65536 bytes); filter with search (text of an "
+    "id, an identifier or a title) or agency_acronym (as list_agencies spells it) to see the "
+    "rest; Python and HTTP callers get the whole table"
+)
+"""The note of the MCP tool called without a filter: the default cap, the cap's own note."""
+
+
+def test_the_python_task_returns_the_whole_table_the_tool_caps() -> None:
     cap = tasks.MCP_CAPS["list_publications"]
+    assert (cap.max_rows, cap.max_bytes) == (ResultCap().max_rows, ResultCap().max_bytes)
     result = tasks.list_publications()
     whole = json.dumps(result.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
     assert len(whole.encode()) == 599_402, "the size MCP_CAPS's comment names"
-    assert len(result.data) < cap.max_rows
-    assert len(whole.encode()) < cap.max_bytes
-    assert json.loads(cap_result(result, cap)) == json.loads(whole), "nothing cut, no note"
-    cut = json.loads(cap_result(result, ResultCap()))
-    assert len(cut["data"]) == 200, "the default cap would cut it"
-    assert cap.note is not None
-    assert "search" in cap.note
-    assert "agency_acronym" in cap.note
+    assert len(result.data) == PUBLICATIONS, "Python callers get the whole table"
+    cut = json.loads(cap_result(result, cap))
+    assert cut["data"] == json.loads(whole)["data"][:200]
+    assert cut["note"] == CAP_NOTE
 
 
 def test_search_publications_collects_every_page(replay_fixture: ReplayFixture) -> None:
@@ -638,12 +643,14 @@ async def test_every_tool_end_to_end(
 
 
 @pytest.mark.anyio
-async def test_the_list_publications_tool_returns_every_row_under_its_cap(
+async def test_the_list_publications_tool_returns_200_rows_with_the_caps_note(
     respx_mock: respx.MockRouter,
 ) -> None:
     payload = await mcp_call(server, "usda_esmis_list_publications", {})
-    assert len(payload["data"]) == PUBLICATIONS
-    assert "note" not in payload, "the cap of its own cuts nothing"
+    whole = tasks.list_publications()
+    assert len(whole.data) == PUBLICATIONS
+    assert payload["data"] == [row.model_dump(mode="json") for row in whole.data[:200]]
+    assert payload["note"] == CAP_NOTE
     assert payload["meta"]["retrieved_at"] == PACKAGED_FETCHED
     assert respx_mock.calls.call_count == 0
 

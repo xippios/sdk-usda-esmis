@@ -71,8 +71,9 @@ An acronym the packaged agency table lacks raises `UnknownCode`, an
 
 Tools are read-only and named `usda_esmis_<verb>_<noun>`. Results are capped, at
 200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest;
-`usda_esmis_list_publications` has one, 3000 rows or 720,000 bytes, so that it returns
-its whole packaged table (about 600 KB) when called without a filter.
+`usda_esmis_list_publications` keeps the default and says how to filter: unfiltered, its
+packaged table is about 600 KB, so the tool returns its first 200 rows, while
+`list_publications()` in Python and its HTTP route return the whole table.
 `download_release_file` is no tool and no route: a bulk task, Python only (ADR-0019).
 `--http` serves streamable HTTP instead of stdio.
 
