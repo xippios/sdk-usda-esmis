@@ -19,6 +19,14 @@ What every task follows:
   ``meta.total`` is ``pager.total_results`` of the last page fetched for the two paged
   list tasks (ADR-0012), ``None`` elsewhere.
   ``meta.retrieved_at`` is when the answer arrived: the client keeps no cache.
+- The packaged answer: ``list_publications`` answers from ``reference/publication.json``,
+  the table ``scripts/refresh_reference.py`` wrote from every page of
+  ``esmis_api_publication_findAll``, and checks its ``agency_acronym`` against
+  ``reference/agency.json``, both read with core's ``PackagedList``, without a request.
+  Its ``meta`` is ``PackagedList.meta``'s (ADR-0022, rule 1): ``retrieved_at`` the
+  table's ``fetched``, ``endpoint`` the operationId it came from, ``vintage``,
+  ``published_at`` and ``total`` empty. An acronym the agency table lacks is refused
+  with core's ``UnknownCode``, an ``InvalidRequestError``, naming the closest.
 - Absence, as recorded per lookup: an unknown release id answers HTTP 404, raised by
   ``_client.classify`` as ``NotFoundError``; an unknown publication identifier answers
   HTTP 200 with nothing, which the single-record tasks ``get_publication`` and
@@ -50,17 +58,28 @@ from xippios.core import (
     Downloaded,
     InvalidRequestError,
     NotFoundError,
+    PackagedList,
     Result,
     ResultCap,
     ResultMeta,
+    UnknownCode,
+    closest,
     collect,
+    matches,
     paginate_offset,
     sync,
 )
 
 from xippios.usda.esmis import api
 from xippios.usda.esmis._client import SOURCE, client
-from xippios.usda.esmis.models import Agency, Pager, Publication, Release, ReleaseFile
+from xippios.usda.esmis.models import (
+    Agency,
+    Pager,
+    Publication,
+    PublicationRow,
+    Release,
+    ReleaseFile,
+)
 
 __all__ = [
     "download_release_file",
@@ -68,6 +87,7 @@ __all__ = [
     "get_publication",
     "get_release",
     "list_agencies",
+    "list_publications",
     "list_release_files",
     "list_releases",
     "search_publications",
@@ -77,18 +97,33 @@ BULK_TASKS = frozenset({"download_release_file"})
 """Tasks the adapters skip (ADR-0019, decision 4): they write a file, which no tool or
 route hands out. Hand-written until the template renders it (template v0.3.0)."""
 
-# No tool gets a result cap of its own (conventions §8, ADR-0016): list_agencies answers
-# 9 rows and list_release_files at most 4 files as recorded, within the default 200 rows
-# or 64 KB. Two tools called without page can exceed it: list_releases answers hundreds
+# One tool gets a result cap of its own (conventions §8, ADR-0016; decided by Johannes on
+# 2026-10-27, sized to the table): list_publications returns the whole packaged table
+# when called without a filter, 2522 rows fetched on 2026-10-27, whose result, envelope
+# included, measured 599,402 bytes of compact JSON (UTF-8, as cap_result counts them);
+# 3000 rows and 720,000 bytes leave about a fifth for the table to grow before the
+# next refresh. Its note names the two filters. Every other tool keeps the default 200
+# rows or 64 KB: list_agencies answers 9 rows and list_release_files at most 4 files as
+# recorded. Two tools called without page can exceed it: list_releases answers hundreds
 # of rows (703 for WASDE), and search_publications every match of a keyword, about 1.8 KB
 # a publication as the WASDE matches average (0.6 KB on publication_find_all's page 0),
 # so 64 KB can cut a broad keyword's list after some 36; a page of 25 fits at those sizes
 # (about 45 KB). The default cap applies to both, with its note, and their docstrings
 # tell an agent to page, list_releases's also to bound the call with since and until.
-MCP_CAPS: Mapping[str, ResultCap] = {}
+MCP_CAPS: Mapping[str, ResultCap] = {
+    "list_publications": ResultCap(
+        max_rows=3000,
+        max_bytes=720_000,
+        note="filter with search (text of an id, an identifier or a title) or agency_acronym "
+        "(as list_agencies spells it) to see the rest",
+    ),
+}
 
 PAGE_SIZE = 25
 """Items on a page of every paged operation, a size no documented parameter changes."""
+
+PACKAGE = "xippios.usda.esmis"
+"""The package whose ``reference/`` holds the packaged tables, for ``PackagedList.load``."""
 
 AGENCIES = "esmis_api_agency_findAll"
 SEARCH = "esmis_api_publication_search"
@@ -204,6 +239,60 @@ async def list_agencies_async() -> Result[list[Agency]]:
     """
     agencies = await api.agency_find_all()
     return Result(data=agencies, meta=ResultMeta(source=SOURCE, endpoint=AGENCIES))
+
+
+async def list_publications_async(
+    search: str | None = None, agency_acronym: str | None = None
+) -> Result[list[PublicationRow]]:
+    """Every ESMIS publication (report series) from the packaged table, filtered by text or agency.
+
+    Answered from the table of 2522 publications the package fetched from
+    ``esmis_api_publication_findAll`` on 2026-10-27 (``reference/publication.json``),
+    without a request; ``search_publications`` searches upstream live instead. A
+    publication ESMIS added since is missing until the package's next refresh. Each row
+    keeps a publication's ``id``, ``identifier``, ``title``, ``agency_acronym``,
+    ``publication_agency_export_1``, ``frequency``, ``status`` and ``resource_type``, in
+    upstream order; its ``identifier`` values are what ``get_publication``,
+    ``list_releases`` and ``get_latest_release`` take (pass one without ``/``). Called
+    without a filter the MCP tool returns the whole table, about 600 KB: filter where you
+    can. ``meta.retrieved_at`` is when the table was fetched, ``meta.endpoint`` the
+    operation it came from. An ``agency_acronym`` the packaged agency table lacks raises
+    ``InvalidRequestError`` naming the closest acronyms.
+
+    Args:
+        search: Keep the publications where this text occurs, ignoring case, in the id,
+            one of the identifiers or the title, each on its own, e.g. ``"wheat"`` (30
+            publications), ``"wasde"`` (World Agricultural Supply and Demand Estimates),
+            ``"1659"`` (its id). ``None`` (the default) keeps every publication.
+        agency_acronym: Keep the publications whose ``agency_acronym`` lists this
+            acronym, spelled exactly as ``list_agencies`` spells it, e.g. ``"ERS"`` (121
+            publications), ``"WAOB"`` (2), ``"AMS-LPS"``; one of ``"FAS"``, ``"ERS"``,
+            ``"WAOB"``, ``"NASS"``, ``"AMS"``, ``"AMS-CT"``, ``"AMS-DA"``, ``"AMS-SC"``,
+            ``"AMS-LPS"`` as packaged. ``None`` (the default) keeps every agency.
+    """
+    if agency_acronym is not None:
+        agencies = PackagedList.load(PACKAGE, "agency")
+        names = {agency.acronym: agency.title for agency in agencies.parse(Agency, source=SOURCE)}
+        if agency_acronym not in names:
+            raise UnknownCode(
+                "agency_acronym",
+                agency_acronym,
+                list_name="agency",
+                fetched=agencies.fetched,
+                closest=closest(agency_acronym, names),
+                reason="list_publications keeps the publications that list the acronym "
+                "exactly, so one no agency has would select nothing.",
+                source=SOURCE,
+            )
+    table = PackagedList.load(PACKAGE, "publication")
+    rows = [
+        row
+        for row in table.parse(PublicationRow, source=SOURCE)
+        if matches(search, row.id, *row.identifier, row.title)
+        and (agency_acronym is None or agency_acronym in (row.agency_acronym or ()))
+    ]
+    meta = table.meta(SOURCE, request={"search": search, "agency_acronym": agency_acronym})
+    return Result(data=rows, meta=meta)
 
 
 async def search_publications_async(
@@ -471,6 +560,7 @@ get_latest_release = sync(get_latest_release_async)
 get_publication = sync(get_publication_async)
 get_release = sync(get_release_async)
 list_agencies = sync(list_agencies_async)
+list_publications = sync(list_publications_async)
 list_release_files = sync(list_release_files_async)
 list_releases = sync(list_releases_async)
 search_publications = sync(search_publications_async)

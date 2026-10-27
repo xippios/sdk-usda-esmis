@@ -9,7 +9,9 @@ keep a request from ``route.calls`` in its frame, where a failure or ``pytest -l
 print it.
 
 Every task is replayed against the answers recorded for the wrappers on 2026-10-27, and
-every tool but the bulk task is called end to end through the MCP server. Two answers
+every tool but the bulk task is called end to end through the MCP server.
+``list_publications`` answers from the packaged tables in ``reference/`` and sends
+nothing: its tests mount no fixture and check that no request left. Two answers
 were recorded for the tasks: WASDE's release page 1 (``release_find_by_identifier/
 wasde_page1.json``), which the walk of ``list_releases`` crosses into, and the October
 2026 WASDE ``.txt`` (``release_files/wasde1026_txt.json``), the exchange the download
@@ -20,16 +22,27 @@ says (ADR-0020).
 import json
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
 import pytest
+import respx
 from fastapi.routing import APIRoute
 from pydantic import TypeAdapter
-from xippios.core import Downloaded, InvalidRequestError, NotFoundError
-from xippios.core.mcp import tool_name
+from xippios.core import (
+    Downloaded,
+    InvalidRequestError,
+    NotFoundError,
+    PackagedList,
+    ResultCap,
+    UnknownCode,
+    UpstreamModel,
+)
+from xippios.core.mcp import cap_result, tool_name
 from xippios.core.testing import (
     ReplayFixture,
+    assert_projection,
     assert_time_between,
     load_fixture,
     mcp_call,
@@ -45,6 +58,7 @@ from xippios.usda.esmis.models import (
     Agency,
     Pager,
     PublicationResults,
+    PublicationRow,
     Release,
     ReleaseFile,
     ReleaseResults,
@@ -57,6 +71,14 @@ WASDE_TXT = f"{BASE_URL}/sites/default/release-files/796099/wasde1026.txt"
 FORMATS = {"pdf", "txt", "xls", "xml", "zip"}
 OCTOBER_PRINTED = datetime(2026, 10, 9, 12, 0)
 """The October 2026 WASDE's ``release_datetime`` as printed, its ``+0000`` dropped."""
+PACKAGE = "xippios.usda.esmis"
+PUBLICATIONS = 2522
+"""Publications in ``reference/publication.json``, as ``list_publications``'s docstring
+counts them; a refresh of the table updates both."""
+PACKAGED_FETCHED = "2026-10-27T17:24:48Z"
+"""The publication table's ``fetched``, as written."""
+FILE_KEYS = {"param", "endpoint", "fetched", "note", "records"}
+"""The keys a packaged file may hold (ADR-0022, amendment point 8)."""
 
 
 def recorded[T](type_: type[T], endpoint: str, case: str) -> T:
@@ -86,6 +108,161 @@ def test_list_agencies(replay_fixture: ReplayFixture) -> None:
     assert (result.meta.total, result.meta.vintage, result.meta.published_at) == (None,) * 3
     assert_time_between(result.meta.retrieved_at, before, after)
     assert sent_urls(route) == [f"{API}/agency/findAll"]
+
+
+def packaged_file(name: str) -> dict[str, Any]:
+    """``reference/<name>.json`` as written, read as JSON, not through ``PackagedList``."""
+    text = resources.files(PACKAGE).joinpath("reference", f"{name}.json").read_text("utf-8")
+    payload: dict[str, Any] = json.loads(text)
+    return payload
+
+
+def test_list_publications_answers_the_whole_table_without_a_request(
+    respx_mock: respx.MockRouter,
+) -> None:
+    table = PackagedList.load(PACKAGE, "publication")
+    result = tasks.list_publications()
+    assert len(result.data) == len(table.records) == PUBLICATIONS
+    assert result.data == table.parse(PublicationRow, source=SOURCE), "upstream order"
+    assert result.meta.source == SOURCE
+    assert result.meta.endpoint == "esmis_api_publication_findAll"
+    assert result.meta.retrieved_at == table.fetched, "the table's fetch time (ADR-0022)"
+    assert result.meta.retrieved_at == datetime.fromisoformat(PACKAGED_FETCHED)
+    assert result.meta.request == {}, "filters left None are omitted"
+    assert (result.meta.vintage, result.meta.published_at, result.meta.total) == (None,) * 3
+    assert not result.meta.published_at_naive
+    assert respx_mock.calls.call_count == 0
+
+
+@pytest.mark.parametrize(
+    ("search", "ids"),
+    [
+        ("wasde", ["1659"]),
+        ("WASDE", ["1659"]),
+        ("1659", ["1659"]),
+        ("CropProg", ["2179"]),
+    ],
+)
+def test_list_publications_search_matches_id_identifier_and_title(
+    search: str, ids: list[str]
+) -> None:
+    result = tasks.list_publications(search=search)
+    assert [row.id for row in result.data] == ids
+    assert result.meta.request == {"search": search}
+
+
+def test_list_publications_search_keeps_every_field_on_its_own() -> None:
+    result = tasks.list_publications(search="wheat")
+    assert len(result.data) == 30, "the docstring's count"
+    for row in result.data:
+        fields = [row.id, *row.identifier, row.title]
+        assert any("wheat" in field.casefold() for field in fields), row.id
+    assert tasks.list_publications(search="xippios-matches-nothing").data == []
+
+
+@pytest.mark.parametrize(("acronym", "count"), [("ERS", 121), ("WAOB", 2), ("AMS-LPS", 1424)])
+def test_list_publications_by_agency_acronym(acronym: str, count: int) -> None:
+    result = tasks.list_publications(agency_acronym=acronym)
+    assert len(result.data) == count
+    assert all(acronym in (row.agency_acronym or []) for row in result.data)
+    assert result.meta.request == {"agency_acronym": acronym}
+
+
+def test_list_publications_with_both_filters() -> None:
+    result = tasks.list_publications(search="wheat", agency_acronym="ERS")
+    assert len(result.data) == 6
+    assert result.meta.request == {"search": "wheat", "agency_acronym": "ERS"}
+    by_search = tasks.list_publications(search="wheat").data
+    by_agency = tasks.list_publications(agency_acronym="ERS").data
+    assert result.data == [row for row in by_agency if row in by_search], "both, upstream order"
+
+
+@pytest.mark.parametrize(
+    ("acronym", "closest"),
+    [
+        ("ers", [("ERS", "Economic Research Service")]),
+        (
+            "AMS-LP",
+            [
+                ("AMS-LPS", "Livestock, Poultry and Seed Program"),
+                ("AMS-SC", "Specialty Crops Program"),
+                ("AMS-DA", "Dairy Program"),
+            ],
+        ),
+        ("XYZ", []),
+    ],
+)
+def test_list_publications_refuses_an_acronym_the_agency_table_lacks(
+    respx_mock: respx.MockRouter, acronym: str, closest: list[tuple[str, str]]
+) -> None:
+    agencies = PackagedList.load(PACKAGE, "agency")
+    with pytest.raises(UnknownCode) as caught:
+        tasks.list_publications(search="wheat", agency_acronym=acronym)
+    refusal = caught.value
+    assert isinstance(refusal, InvalidRequestError)
+    assert (refusal.param, refusal.value) == ("agency_acronym", acronym)
+    assert refusal.list_name == "agency"
+    assert refusal.fetched == agencies.fetched
+    assert list(refusal.closest) == closest
+    message = str(refusal)
+    assert f"{acronym!r} is not an agency_acronym in the packaged agency list" in message
+    assert f"(fetched {agencies.fetched:%Y-%m-%d})" in message
+    for code, name in closest:
+        assert f"{code} ({name})" in message
+    assert respx_mock.calls.call_count == 0
+
+
+def test_the_packaged_files_hold_the_four_keys_and_a_note() -> None:
+    files: list[tuple[str, str, type[UpstreamModel]]] = [
+        ("publication", "esmis_api_publication_findAll", PublicationRow),
+        ("agency", "esmis_api_agency_findAll", Agency),
+    ]
+    for name, endpoint, model in files:
+        raw = packaged_file(name)
+        assert set(raw) == FILE_KEYS, name
+        table = PackagedList.load(PACKAGE, name)
+        assert (table.param, table.endpoint) == (name, endpoint)
+        assert table.note
+        assert table.fetched.tzinfo is UTC
+        rows = table.parse(model, source=SOURCE)
+        for row, record in zip(rows, raw["records"], strict=True):
+            assert set(record) == set(model.model_fields), "every field, null included"
+            assert row.dump_upstream() == record, "records under upstream's names"
+    assert packaged_file("publication")["fetched"] == PACKAGED_FETCHED
+
+
+def test_the_packaged_tables_agree() -> None:
+    publications = PackagedList.load(PACKAGE, "publication").parse(PublicationRow, source=SOURCE)
+    agencies = PackagedList.load(PACKAGE, "agency").parse(Agency, source=SOURCE)
+    ids = [row.id for row in publications]
+    assert len(set(ids)) == len(ids) == PUBLICATIONS
+    acronyms = {agency.acronym for agency in agencies}
+    assert len(agencies) == len(acronyms) == 9
+    # Every acronym a publication lists is in the agency table, so the refusal of an
+    # acronym the table lacks never hides a publication.
+    listed = {acronym for row in publications for acronym in row.agency_acronym or []}
+    assert listed == acronyms
+
+
+def test_publication_row_is_a_projection_of_publication() -> None:
+    page = recorded(PublicationResults, "publication_find_all", "page0").results
+    for publication in page:
+        assert_projection(PublicationRow.project(publication), publication)
+
+
+def test_the_cap_of_list_publications_returns_the_whole_table() -> None:
+    cap = tasks.MCP_CAPS["list_publications"]
+    result = tasks.list_publications()
+    whole = json.dumps(result.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
+    assert len(whole.encode()) == 599_402, "the size MCP_CAPS's comment names"
+    assert len(result.data) < cap.max_rows
+    assert len(whole.encode()) < cap.max_bytes
+    assert json.loads(cap_result(result, cap)) == json.loads(whole), "nothing cut, no note"
+    cut = json.loads(cap_result(result, ResultCap()))
+    assert len(cut["data"]) == 200, "the default cap would cut it"
+    assert cap.note is not None
+    assert "search" in cap.note
+    assert "agency_acronym" in cap.note
 
 
 def test_search_publications_collects_every_page(replay_fixture: ReplayFixture) -> None:
@@ -353,7 +530,7 @@ async def test_the_bulk_task_is_no_tool_and_no_route() -> None:
         served = name not in bulk
         assert (tool_name(SOURCE, fn) in tools) is served, name
         assert (f"/{SOURCE}/{name}" in routes) is served, name
-    assert len(tools) == len(routes) == 7
+    assert len(tools) == len(routes) == 8
 
 
 type McpCase = tuple[str, dict[str, Any], list[tuple[str, str]], list[str], Callable[..., bool]]
@@ -366,6 +543,17 @@ MCP_CASES: list[McpCase] = [
         [("agency_find_all", "all")],
         [f"{API}/agency/findAll"],
         lambda payload: len(payload["data"]) == 9,
+    ),
+    (
+        "list_publications",
+        {"agency_acronym": "WAOB"},
+        [],
+        [],
+        lambda payload: (
+            [row["id"] for row in payload["data"]] == ["1659", "1699"]
+            and payload["meta"]["retrieved_at"] == PACKAGED_FETCHED
+            and payload["meta"]["endpoint"] == "esmis_api_publication_findAll"
+        ),
     ),
     (
         "search_publications",
@@ -447,6 +635,24 @@ async def test_every_tool_end_to_end(
     assert payload["meta"]["source"] == SOURCE
     assert check(payload), payload["meta"]
     assert [url for route in routes for url in sent_urls(route)] == urls
+
+
+@pytest.mark.anyio
+async def test_the_list_publications_tool_returns_every_row_under_its_cap(
+    respx_mock: respx.MockRouter,
+) -> None:
+    payload = await mcp_call(server, "usda_esmis_list_publications", {})
+    assert len(payload["data"]) == PUBLICATIONS
+    assert "note" not in payload, "the cap of its own cuts nothing"
+    assert payload["meta"]["retrieved_at"] == PACKAGED_FETCHED
+    assert respx_mock.calls.call_count == 0
+
+
+@pytest.mark.anyio
+async def test_the_list_publications_tool_refuses_an_unknown_acronym_as_text() -> None:
+    text = await mcp_call_text(server, "usda_esmis_list_publications", {"agency_acronym": "ers"})
+    assert text.startswith("error: UnknownCode: 'ers' is not an agency_acronym")
+    assert "Did you mean ERS (Economic Research Service)?" in text
 
 
 @pytest.mark.anyio

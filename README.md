@@ -70,6 +70,7 @@ exactly tasks.__all__ and tasks_write.__all__. -->
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
 | `esmis_api_agency_findAll` | `list_agencies()` | `usda_esmis_list_agencies` | alpha |
+| `esmis_api_publication_findAll`, every page, packaged (fetched 2026-10-27; no request) | `list_publications(search=None, agency_acronym=None)` | `usda_esmis_list_publications` | alpha |
 | `esmis_api_publication_search`, every page unless `page` is given | `search_publications(query, page=None)` | `usda_esmis_search_publications` | alpha |
 | `esmis_api_publication_findByIdentifier` | `get_publication(publication_identifier)` | `usda_esmis_get_publication` | alpha |
 | `esmis_api_release_findByIdentifier`, pages walked newest first unless `page` is given | `list_releases(publication_identifier, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |
