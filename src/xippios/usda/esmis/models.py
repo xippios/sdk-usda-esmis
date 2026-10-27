@@ -129,13 +129,14 @@ class Publication(UpstreamModel):
         keywords: ``keywords``, e.g. ``["dairy", "grains", "soybeans"]``.
         frequency: ``frequency``; the document lists ``Daily``, ``Bi-weekly``,
             ``Weekly``, ``Monthly``, ``Annually``, ``Seasonal``, ``Other`` and ``Not
-            specified``; recorded: ``"Daily"``, ``"Weekly"``, ``"Monthly"``.
+            specified``; recorded: ``"Daily"``, ``"Weekly"``, ``"Monthly"``,
+            ``"Annually"``.
         status: ``status``; the document lists ``Active`` and ``Inactive``; recorded:
             ``"Active"``.
         subscribable: ``subscribable``, the text ``"Yes"`` or ``"No"`` as the document
             lists them, not a boolean.
         resource_type: ``resource_type``; the document lists ``Report``, ``Dataset`` and
-            ``Statistical bulletin``; recorded: ``"Report"``.
+            ``Statistical bulletin``; recorded: ``"Report"``, ``"Dataset"``.
         subject: ``subject``, e.g. ``["Grains and Oilseeds"]``.
         description: ``description``, text as upstream prints it, HTML entities such as
             ``&nbsp;`` included.

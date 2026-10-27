@@ -10,6 +10,7 @@ redacted, never a request kept from ``route.calls``.
 import importlib
 import json
 import re
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -230,16 +231,73 @@ async def test_publication_find_by_id_unknown(replay_fixture: ReplayFixture) -> 
     assert sent_urls(route) == [f"{API}/publication/findById/99999999"]
 
 
+EMPTY_PAGER = Pager(current_page=0, items_per_page=25, total_pages=0, total_results=0)
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "call", "path"),
+    [
+        ("agency_find_by_id", lambda: api.agency_find_by_id(999999999), "agency/findById"),
+        ("release_find_by_id", lambda: api.release_find_by_id(999999999), "release/findById"),
+        (
+            "release_find_by_pub_id",
+            lambda: api.release_find_by_pub_id(999999999, page=0),
+            "release/findByPubId",
+        ),
+    ],
+    ids=["agency_find_by_id", "release_find_by_id", "release_find_by_pub_id"],
+)
+async def test_an_unknown_id_is_not_found(
+    replay_fixture: ReplayFixture,
+    endpoint: str,
+    call: Callable[[], Awaitable[object]],
+    path: str,
+) -> None:
+    """Every lookup by id answers an unknown id with HTTP 404 ``{"message": ""}``, as
+    recorded, the release list by publication id included."""
+    route = replay_fixture(endpoint, "unknown")
+    assert recorded_body(endpoint, "unknown") == {"message": ""}
+    with pytest.raises(NotFoundError) as info:
+        await call()
+    assert str(info.value) == f"ESMIS has no record at GET /api/v1/{path}/999999999 (HTTP 404)"
+    [sent] = sent_urls(route)
+    assert sent.startswith(f"{API}/{path}/999999999")
+
+
+async def test_an_unknown_acronym_answers_an_empty_array(replay_fixture: ReplayFixture) -> None:
+    route = replay_fixture("agency_find_by_acronym", "unknown")
+    assert await api.agency_find_by_acronym("NOPE") == []
+    assert sent_urls(route) == [f"{API}/agency/findByAcronym/NOPE"]
+
+
+async def test_an_unknown_acronym_has_no_publications(replay_fixture: ReplayFixture) -> None:
+    route = replay_fixture("publication_find_by_agency", "unknown")
+    page = await api.publication_find_by_agency("NOPE", page=0)
+    assert (page.pager, page.results) == (EMPTY_PAGER, [])
+    assert sent_urls(route) == [f"{API}/publication/findByAgency/NOPE?page=0"]
+
+
+async def test_an_unknown_identifier_has_no_releases(replay_fixture: ReplayFixture) -> None:
+    route = replay_fixture("release_find_by_identifier", "unknown")
+    page = await api.release_find_by_identifier("nope-nope", page=0)
+    assert (page.pager, page.results) == (EMPTY_PAGER, [])
+    assert sent_urls(route) == [f"{API}/release/findByIdentifier/nope-nope?page=0"]
+
+
 def test_classify_maps_the_recorded_404() -> None:
     fixture = load_fixture(FIXTURES / "publication_find_by_id" / "unknown.json")
     assert isinstance(classify(response_from_fixture(fixture)), NotFoundError)
 
 
 def test_classify_leaves_the_rest_to_core() -> None:
-    """A success, an unknown identifier's 200 and a 404 outside ``/api/v1/`` fall through."""
+    """A success, the empty 200s of unknown names and a 404 outside ``/api/v1/`` fall
+    through."""
     for endpoint, case in (
         ("publication_find_by_id", "1659"),
         ("publication_find_by_identifier", "unknown"),
+        ("agency_find_by_acronym", "unknown"),
+        ("publication_find_by_agency", "unknown"),
+        ("release_find_by_identifier", "unknown"),
     ):
         fixture = load_fixture(FIXTURES / endpoint / f"{case}.json")
         assert classify(response_from_fixture(fixture)) is None

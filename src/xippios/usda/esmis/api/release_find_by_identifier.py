@@ -7,7 +7,9 @@ their publication's identifier.": the path parameter ``publicationIdentifier``, 
 default ``0``; the response ``ReleaseResults``, 0-based pages of 25. Recorded:
 ``tests/fixtures/release_find_by_identifier/wasde_page0.json`` (703 WASDE releases, 29
 pages, the latest ``release_datetime`` first), the same answer as
-``esmis_api_release_findByPubId`` for its publication id.
+``esmis_api_release_findByPubId`` for its publication id. An unknown identifier answers
+HTTP 200 with empty ``results`` and every pager count ``0`` (``unknown.json``), returned
+as such, where ``esmis_api_release_findByPubId`` answers an unknown id with a 404.
 
 The identifier is URL-quoted with ``safe=""``; one carrying ``/`` is refused by ESMIS's
 web server, as recorded for ``esmis_api_publication_findByIdentifier``, and

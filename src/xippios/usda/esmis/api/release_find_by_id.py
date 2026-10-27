@@ -5,8 +5,8 @@ Operation ``esmis_api_release_findById`` of ``docs/upstream/openapi/esmis_public
 ``integer`` in the document (its example: ``795266``), although ``Release.id`` arrives as
 a string of digits; the response ``ReleaseResults``, a pager and one result as recorded
 (``tests/fixtures/release_find_by_id/796099.json``, WASDE of 2026-10-09). An unknown id
-is not recorded for releases; a 404 is raised as ``NotFoundError`` by
-``_client.classify``, as for publications.
+answers HTTP 404 ``{"message": ""}`` (``unknown.json``), which ``_client.classify`` raises
+as ``NotFoundError``.
 """
 
 from xippios.core import parse
@@ -29,7 +29,7 @@ async def release_find_by_id(release_id: int) -> ReleaseResults:
         The ``pager`` and the release, one result.
 
     Raises:
-        NotFoundError: Upstream answered HTTP 404.
+        NotFoundError: No release has this id (HTTP 404).
     """
     raw = await client.get_json(f"/api/v1/release/findById/{release_id}")
     return parse(ReleaseResults, raw, source=SOURCE, endpoint=OPERATION)

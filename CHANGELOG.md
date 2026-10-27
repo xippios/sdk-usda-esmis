@@ -24,8 +24,10 @@ All notable changes to this project are documented here. The format follows
 - Endpoint wrappers for the twelve operations of the ESMIS catalog (agencies,
   publications, releases) under `xippios.usda.esmis.api`, the models `Agency`, `Pager`,
   `Publication`, `Release`, `PublicationResults` and `ReleaseResults` typed as the wire
-  sends them, and the client's `classify`: an unknown id is `NotFoundError`, an
-  identifier carrying `/`, which ESMIS refuses, `InvalidRequestError`. Recorded fixtures
+  sends them, and the client's `classify`: an unknown id, which the four lookups by id
+  answer with HTTP 404, is `NotFoundError`, and an identifier carrying `/`, which ESMIS
+  refuses, `InvalidRequestError`; the lookups by acronym or identifier answer an unknown
+  one with an empty HTTP 200, returned as such. Recorded fixtures
   and replay tests in `tests/test_api.py`; CLAUDE.md gains the ESMIS specifics.
 
 ### Changed

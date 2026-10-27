@@ -4,8 +4,9 @@ Operation ``esmis_api_agency_findByAcronym`` of
 ``docs/upstream/openapi/esmis_public_api.yaml``, "Search for a single agency's metadata by
 its acronym.": the path parameter ``agencyAcronym``, a string (the document's example:
 ``NASS``); the response ``AgencyResults``, a bare JSON array of ``Agency``, one record as
-recorded (``tests/fixtures/agency_find_by_acronym/waob.json``). The acronym is URL-quoted
-with ``safe=""``, so a space or a slash stays inside its path segment.
+recorded (``tests/fixtures/agency_find_by_acronym/waob.json``); an unknown acronym
+answers HTTP 200 with an empty array (``unknown.json``), returned as such. The acronym is
+URL-quoted with ``safe=""``, so a space or a slash stays inside its path segment.
 """
 
 from urllib.parse import quote
@@ -28,7 +29,8 @@ async def agency_find_by_acronym(agency_acronym: str) -> list[Agency]:
             ``"NASS"``.
 
     Returns:
-        The matching agencies as upstream lists them, one as recorded.
+        The matching agencies as upstream lists them, one as recorded, none for an
+        unknown acronym.
     """
     path = f"/api/v1/agency/findByAcronym/{quote(agency_acronym, safe='')}"
     raw = await client.get_json(path)

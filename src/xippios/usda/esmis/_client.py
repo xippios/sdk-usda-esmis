@@ -70,15 +70,19 @@ def classify(response: httpx.Response) -> XippiosError | None:
       identifier carrying ``/`` (``"Market and Trade Economics Division/FDS"``) cannot
       be looked up; the publications recorded with one carry another without ``/``
       (``"FDS"``).
-    - Any other 404 under ``/api/v1/`` is ``NotFoundError``: ``findById`` of an unknown id
-      answers HTTP 404 with ``{"message": ""}``, as recorded for
-      ``esmis_api_publication_findById``
-      (``tests/fixtures/publication_find_by_id/unknown.json``). Upstream's ``message`` is
-      quoted when it is not empty.
+    - Any other 404 under ``/api/v1/`` is ``NotFoundError``: every lookup by id answers an
+      unknown id with HTTP 404 ``{"message": ""}``, as recorded for
+      ``esmis_api_agency_findById``, ``esmis_api_publication_findById``,
+      ``esmis_api_release_findById`` and ``esmis_api_release_findByPubId``
+      (``tests/fixtures/<wrapper>/unknown.json``). Upstream's ``message`` is quoted when
+      it is not empty.
 
-    Everything else falls through to core's status mapping, and ``None`` is returned: an
-    unknown identifier answers HTTP 200 with empty ``results``, which is not an error at
-    this layer. Messages name the method and the path, never the host or the query
+    Everything else falls through to core's status mapping, and ``None`` is returned: the
+    lookups by name answer an unknown acronym or identifier with HTTP 200 and nothing
+    (``esmis_api_agency_findByAcronym`` an empty array;
+    ``esmis_api_publication_findByAgency``, ``esmis_api_publication_findByIdentifier``
+    and ``esmis_api_release_findByIdentifier`` empty ``results``), which is not an error
+    at this layer. Messages name the method and the path, never the host or the query
     (conventions §5).
     """
     request = response.request

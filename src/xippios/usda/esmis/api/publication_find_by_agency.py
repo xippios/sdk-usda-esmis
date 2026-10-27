@@ -5,8 +5,9 @@ Operation ``esmis_api_publication_findByAgency`` of
 by agency acronym.": the path parameter ``agencyAcronym``, a string (the document's
 example: ``NASS``), and the query parameter ``page``, an integer, default ``0``; the
 response ``PublicationResults``, paged as ``esmis_api_publication_findAll`` is. Recorded:
-``tests/fixtures/publication_find_by_agency/waob_page0.json`` (WAOB's 2 publications).
-The acronym is URL-quoted with ``safe=""``.
+``tests/fixtures/publication_find_by_agency/waob_page0.json`` (WAOB's 2 publications);
+an unknown acronym answers HTTP 200 with empty ``results`` and every pager count ``0``
+(``unknown.json``), returned as such. The acronym is URL-quoted with ``safe=""``.
 """
 
 from urllib.parse import quote

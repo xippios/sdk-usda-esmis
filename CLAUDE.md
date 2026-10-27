@@ -41,10 +41,13 @@ wrapper from memory of the API.
   publication's releases by `release_datetime`, latest first; the publication list in
   neither order. `publication_search` with an empty `query` answers `"pager": []`,
   which `PublicationResults.pager` takes as `()`.
-- **Absence and refusals** (`_client.classify`). An unknown id answers HTTP 404
-  `{"message": ""}`, raised as `NotFoundError`. An unknown identifier answers HTTP 200
-  with empty `results`; the wrappers return it as such, and how the tasks report it is
-  decided in the tasks round. An identifier carrying `/` (`Market and Trade Economics
+- **Absence and refusals** (`_client.classify`), as recorded per lookup. An unknown id
+  answers HTTP 404 `{"message": ""}`, raised as `NotFoundError`, at `agency/findById`,
+  `publication/findById`, `release/findById` and `release/findByPubId`. An unknown name
+  answers HTTP 200 with nothing: `agency/findByAcronym` an empty array,
+  `publication/findByAgency`, `publication/findByIdentifier` and
+  `release/findByIdentifier` empty `results` with every pager count 0. The wrappers
+  return those as such; how the tasks report them is decided in the tasks round. An identifier carrying `/` (`Market and Trade Economics
   Division/FDS`) cannot be looked up: ESMIS's web server refuses `%2F` with an HTML 404,
   raised as `InvalidRequestError`, and a raw slash is no route; the publications
   recorded with one carry another identifier without it (`FDS`).
