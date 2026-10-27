@@ -46,6 +46,19 @@ All notable changes to this project are documented here. The format follows
   Replay tests for every task, the tools called end to end, the October 2026 WASDE
   `.txt` recorded whole for the download's replay, and live tests for every task and
   for the release order the release tasks rely on.
+- Two packaged reference tables, written by `scripts/refresh_reference.py` with core's
+  `PackagedList.write` on 2026-10-27: `reference/publication.json`, the 2522
+  publications of every page of `/publication/findAll`, each the eight columns of the
+  new projection `PublicationRow`, and `reference/agency.json`, the 9 agencies with every
+  field.
+- `list_publications(search=None, agency_acronym=None)`, an MCP tool and an HTTP route
+  answered from the packaged publication table without a request: `search` matches the
+  id, an identifier or the title (core's `matches`), `agency_acronym` an acronym the row
+  lists, and an acronym the packaged agency table lacks is refused with core's
+  `UnknownCode`, naming the closest. `meta.retrieved_at` is the table's fetch time and
+  `meta.endpoint` `esmis_api_publication_findAll` (ADR-0022). Its MCP tool has a cap of
+  its own, 3000 rows or 720,000 bytes, sized to return the whole table (ADR-0016). Live
+  tests compare the packaged agencies and the publication count with upstream.
 
 ### Changed
 
@@ -56,6 +69,8 @@ All notable changes to this project are documented here. The format follows
   0.3.0 on 2026-10-27, this branch carried a git pin to sdk-core `main` (`787b60c`,
   then `cb8ecdf`) by the pin rule of the family roadmap §3; the pin is gone. The
   adoption of template v0.3.0 follows as a PR of its own.
-- `scripts/refresh_reference.py` calls core's `render_enums`, since core 0.3.0 removed
-  `render_str_enums` and `render_int_enums`: a hand-port ahead of template v0.3.0, which
-  renders it. `enums.py` is not regenerated here.
+- `scripts/refresh_reference.py` refreshes the two packaged tables through `api/` (102
+  requests: the agencies and the 101 publication pages, bounded by `total_pages`) and
+  rewrites the provenance rows of `reference/README.md`; it generates no `enums.py`, so
+  the scaffold's `--render-only` is gone, and `params.PACKAGED_LISTS` stays empty, since
+  the tables are `PackagedList` files that `tasks.py` reads directly.

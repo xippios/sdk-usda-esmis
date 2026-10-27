@@ -42,6 +42,21 @@ txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 `search_publications("wasde")` finds a publication's identifiers, and
 `list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, newest first.
 
+`list_publications()` answers from the table of 2522 publications packaged with this
+version, fetched on 2026-10-27, without a request:
+
+```python
+from xippios.usda.esmis import list_publications
+
+wheat = list_publications(search="wheat")  # id, identifier or title contains "wheat": 30
+ers = list_publications(agency_acronym="ERS")  # as list_agencies() spells it: 121
+ers.meta.retrieved_at  # 2026-10-27 17:24:48+00:00, when the table was fetched
+ers.meta.endpoint  # "esmis_api_publication_findAll", the operation it came from
+```
+
+An acronym the packaged agency table lacks raises `UnknownCode`, an
+`InvalidRequestError` naming the closest (`"ers"`: did you mean `ERS`?).
+
 ## MCP
 
 ```json
@@ -55,7 +70,9 @@ txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 ```
 
 Tools are read-only and named `usda_esmis_<verb>_<noun>`. Results are capped, at
-200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest.
+200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest;
+`usda_esmis_list_publications` has one, 3000 rows or 720,000 bytes, so that it returns
+its whole packaged table (about 600 KB) when called without a filter.
 `download_release_file` is no tool and no route: a bulk task, Python only (ADR-0019).
 `--http` serves streamable HTTP instead of stdio.
 
