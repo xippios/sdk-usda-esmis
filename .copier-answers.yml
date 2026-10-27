@@ -1,0 +1,17 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v0.2.2
+_src_path: https://github.com/xippios/sdk-template.git
+api_base_url: https://esmis.nal.usda.gov
+api_key_env: ''
+core_git_ref: ''
+core_version: 0.2.1
+domain_topic: agriculture
+import_path: usda.esmis
+needs_write_tools: false
+rate_limit_burst: 1
+rate_limit_per_minute: 30
+rate_limit_provenance: self-imposed
+source_name: USDA ESMIS
+source_slug: usda-esmis
+upstream_docs_url: https://esmis.nal.usda.gov/api-documentation
+upstream_url: https://esmis.nal.usda.gov
