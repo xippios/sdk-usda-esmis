@@ -25,7 +25,8 @@ pytestmark = [pytest.mark.live, pytest.mark.anyio]
 
 WASDE = "wasde"
 OCTOBER_2026_WASDE = 796099
-"""A WASDE release the catalog keeps: its id is stable, its files are not checked."""
+"""A WASDE release the catalog keeps, its id stable; its files are checked by shape and for a
+``.txt`` (``test_list_release_files_live``)."""
 
 
 async def test_upstream_answers() -> None:

@@ -86,8 +86,10 @@ wrapper from memory of the API.
   `release_datetime`, never converted, and its `meta.total` is upstream's count before
   that filter. `get_latest_release` takes the latest `release_datetime` of page 0,
   never the highest id. `meta.request` omits what the caller left `None`. `MCP_CAPS` is
-  empty: every tool fits the default cap but `list_releases` without `page`, whose
-  docstring tells an agent to page or to bound the call.
+  empty, and the default cap (200 rows or 64 KB) can cut two tools called without
+  `page`: `list_releases` (703 rows for WASDE) and a broad `search_publications` (about
+  1.8 KB a publication, so after some 36 matches). Their docstrings tell an agent to
+  page, `list_releases`'s also to bound the call with `since` and `until`.
 - **A catalog, never a parser** (ADR-0020). This package lists publications, releases
   and their files, and downloads a file; it never parses one. Parser packages such as
   `xippios-usda-wasde` depend on its tasks and models, never on `api/` or `_client`

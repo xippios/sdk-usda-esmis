@@ -15,8 +15,9 @@ What every task follows:
 - ``meta.endpoint`` is the operationId of ``docs/upstream/openapi/esmis_public_api.yaml``
   (``esmis_api_release_findById``); for the download, the file's name as upstream prints
   it (``wasde1026.txt``; ADR-0020, decision 5). ``meta.request`` holds the parameters the
-  caller gave, none left ``None`` (ADR-0022). ``meta.total`` is ``pager.total_results`` of
-  the last page fetched for the two paged list tasks (ADR-0012), ``None`` elsewhere.
+  caller gave, none left ``None`` (ADR-0022), and for the download also the file's ``url``.
+  ``meta.total`` is ``pager.total_results`` of the last page fetched for the two paged
+  list tasks (ADR-0012), ``None`` elsewhere.
   ``meta.retrieved_at`` is when the answer arrived: the client keeps no cache.
 - Absence, as recorded per lookup: an unknown release id answers HTTP 404, raised by
   ``_client.classify`` as ``NotFoundError``; an unknown publication identifier answers
@@ -76,12 +77,14 @@ BULK_TASKS = frozenset({"download_release_file"})
 """Tasks the adapters skip (ADR-0019, decision 4): they write a file, which no tool or
 route hands out. Hand-written until the template renders it (template v0.3.0)."""
 
-# No tool needs a result cap of its own (conventions §8, ADR-0016): list_agencies answers
-# 9 rows, a page of search_publications 25, list_release_files at most 4 files as
-# recorded, all within the default 200 rows or 64 KB. list_releases without page can
-# answer hundreds of rows (703 for WASDE); the default cap applies to it, and its
-# docstring tells an agent to page or to bound the call with since and until.
-# search_publications needs no cap either: the default applies, with its note.
+# No tool gets a result cap of its own (conventions §8, ADR-0016): list_agencies answers
+# 9 rows and list_release_files at most 4 files as recorded, within the default 200 rows
+# or 64 KB. Two tools called without page can exceed it: list_releases answers hundreds
+# of rows (703 for WASDE), and search_publications every match of a keyword, about 1.8 KB
+# a publication as the WASDE matches average (0.6 KB on publication_find_all's page 0),
+# so 64 KB can cut a broad keyword's list after some 36; a page of 25 fits at those sizes
+# (about 45 KB). The default cap applies to both, with its note, and their docstrings
+# tell an agent to page, list_releases's also to bound the call with since and until.
 MCP_CAPS: Mapping[str, ResultCap] = {}
 
 PAGE_SIZE = 25
@@ -118,6 +121,8 @@ class _Pages[T]:
         last: Whether the page just fetched is the last one wanted; ``None`` walks on.
         pager: The ``pager`` of the last answer; ``None`` before one, or where upstream
             sent ``[]``.
+        ended: Whether ``last`` said the page just fetched was the last one wanted; once
+            set, ``fetch`` answers ``[]`` without a request.
     """
 
     fetch_page: Callable[[int], Awaitable[_PageAnswer[T]]]
@@ -208,7 +213,9 @@ async def search_publications_async(
 
     One request per page of 25 (``esmis_api_publication_search``): ``page`` given returns
     that page, omitted every page. ``"wasde"`` matched 7 publications on 2026-10-27, WASDE
-    itself (identifier ``"wasde"``) among them. A publication's ``identifier`` values are
+    itself (identifier ``"wasde"``) among them. The MCP tool returns at most 200 rows or
+    64 KB, as few as 36 publications at about 1.8 KB each: page a broad keyword with
+    ``page`` (0, 1, ...) until a page is short. A publication's ``identifier`` values are
     what ``get_publication``, ``list_releases`` and ``get_latest_release`` take; pass one
     without ``/``. ``meta.total`` is upstream's count of matches. An empty or blank
     ``query`` raises ``InvalidRequestError`` before anything is sent: ESMIS requires one
@@ -297,10 +304,10 @@ async def list_releases_async(
     Args:
         publication_identifier: One of a publication's ``identifier`` values, e.g.
             ``"wasde"``, ``"CropProg"``; pass one without ``/``.
-        since: The earliest release date to keep, e.g. ``"2026-01-01"``; ``None`` (the
-            default) keeps every one.
-        until: The latest release date to keep, e.g. ``"2026-06-30"``; ``None`` (the
-            default) keeps every one.
+        since: The earliest release date to keep, e.g. ``2026-01-01`` (a date); ``None``
+            (the default) keeps every one.
+        until: The latest release date to keep, e.g. ``2026-06-30`` (a date); ``None``
+            (the default) keeps every one.
         page: A 0-based page of 25, e.g. ``0`` for the newest releases; ``None`` (the
             default) walks the pages.
     """
