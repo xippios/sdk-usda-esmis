@@ -82,22 +82,40 @@ exactly tasks.__all__ and tasks_write.__all__. -->
 The OpenAPI document in `docs/upstream/openapi/esmis_public_api.yaml` is the reference
 for names and parameters; the live API answers differently in these points:
 
-- every `id` is a JSON string, not an integer;
+- every `id` is a JSON string, not an integer; the walk of every `/publication/findAll`
+  page on 2026-10-27 (pages 0 to 100) found 2522 publications with distinct ids, each a
+  string of digits;
 - `Publication.agency`, `.identifier` and `.agency_acronym` are arrays, not strings;
-- `agency_acronym` is absent on some publications, which carry
-  `publication_agency_export_1` instead;
+- `agency_acronym` is absent on the publications the four other publication operations
+  answer, which carry `publication_agency_export_1` instead; `/publication/findAll`
+  carried `agency_acronym` on all 2522 publications of the walk and
+  `publication_agency_export_1` on none;
+- `Publication.frequency` printed `""` on one publication of the walk (1172), a value
+  the document's enumeration does not list; `status`, `subscribable` and
+  `resource_type` held only the document's values;
 - the list wrapper has `filters`, `sorters` and `system` (`{"page_key": "page"}`)
   beside `pager` and `results`;
-- `/publication/search` without `query` answers 200 with `"pager": []`;
-- `/publication/findById` of an unknown id answers 404 `{"message": ""}`,
-  `/publication/findByIdentifier` of an unknown identifier answers 200 with empty
-  results; the agency and release lookups were not probed;
+- `/publication/search` without `query`, or with an empty one, answers 200 with
+  `"pager": []` and empty results, although the document makes `query` required;
+- absence answers differ per lookup, as recorded: an unknown id answers 404
+  `{"message": ""}` at `/agency/findById`, `/publication/findById`, `/release/findById`
+  and `/release/findByPubId`; an unknown name answers 200 with nothing,
+  `/agency/findByAcronym` an empty array, `/publication/findByAgency`,
+  `/publication/findByIdentifier` and `/release/findByIdentifier` empty results with
+  every pager count 0;
+- an identifier carrying `/` (`Market and Trade Economics Division/FDS`) cannot be
+  looked up: the web server answers `%2F` in a path with its own HTML 404, and a raw
+  slash is no route; every publication recorded with such an identifier has another
+  without it (`FDS`);
 - `page` is 0-based and a page holds 25 items, as the YAML's defaults say; undocumented
   are that the page size is fixed and that a page past the last answers empty results
   with `current_page` clamped;
-- release lists come newest first by id (descending), undocumented, with
-  `release_datetime` only mostly in that order (`/release/findAll` page 0 runs
-  2026-10-26, 2026-10-09, 2026-10-23); publication lists follow no id order
+- the orders are undocumented: `/release/findAll` comes highest id first, the newest
+  created, with `release_datetime` only mostly in that order (page 0 runs 2026-10-26,
+  2026-10-09, 2026-10-23); a publication's releases (`/release/findByIdentifier`) come
+  latest `release_datetime` first, as recorded on WASDE's pages 0 and 1 (50 releases,
+  2026-10-09 back to 2022-08-12), while their ids do not follow the dates (96169, 96170
+  and 96171 are August, July and June 2025); publication lists follow no id order
   (`/publication/findAll` page 0: ids 2425, 1801, 1861, 1922;
   `/publication/search?query=wasde`: 1762, 1831, 1154);
 - `release_datetime` is `YYYY-MM-DDTHH:MM:SS+0000` (a zone, no colon);
@@ -106,8 +124,10 @@ for names and parameters; the live API answers differently in these points:
   (`/sites/default/release-files/796099/wasde1026.txt`), older ones the hashed
   three-segment path the YAML's example shows
   (`/sites/default/release-files/8336h188j/2514qk05k/j0991c960/prog3925.pdf`);
-- `Publication.upcoming_releases` was `[]` on every sampled publication, and the YAML
-  lists no release-calendar operation;
+- `Publication.upcoming_releases` is `[]` on most publications: the walk found items on
+  24 of 2522, 67 in all, each printed with an Eastern offset
+  (`2026-10-28T15:00:00-0400` and `2026-11-04T15:00:00-0500` for publication 1863),
+  where `release_datetime` prints `+0000`; the YAML lists no release-calendar operation;
 - the zone label of release times: the API prints `release_datetime` with `+0000` and
   the release page its `datetime` with `Z` (`2026-10-09T12:00:00+0000` and
   `datetime="2026-10-09T12:00:00Z"` for the October 2026 WASDE), while the release
@@ -118,12 +138,13 @@ for names and parameters; the live API answers differently in these points:
   `HEAD /sites/default/release-files/796099/wasde1026.txt` with
   `Last-Modified: Fri, 09 Oct 2026 16:01:00 GMT`, 12:01 Eastern. The `+0000`/`Z` label
   is contradicted by upstream's own calendar and file timestamps, which fit a noon
-  Eastern wall-clock time; how `published_at` treats it was decided on 2026-10-27 and
-  lands with the tasks PR (ADR-0022);
+  Eastern wall-clock time (the recorded download of `wasde1026.txt` answers the same
+  `Last-Modified`); the tasks keep `release_datetime` as printed and leave
+  `meta.published_at` empty at the current core pin (ADR-0022; CLAUDE.md, release times);
 - the release calendar page (`docs/upstream/pages/release-calendar.md`) held 3776
   events, drawn from a `publication_upcoming_releases` field (each event's
-  `startField`), while the API's `Publication.upcoming_releases` answered `[]` for
-  every sampled publication; every calendar event is classed `fc-event-past`, future
+  `startField`), while the API's `Publication.upcoming_releases` lists 67 upcoming
+  releases on 24 publications; every calendar event is classed `fc-event-past`, future
   ones included, and WASDE's events stop at 2025-12-09.
 
 ## Upstream terms and attribution

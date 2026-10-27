@@ -30,6 +30,20 @@ All notable changes to this project are documented here. The format follows
   refuses, `InvalidRequestError`; the lookups by acronym or identifier answer an unknown
   one with an empty HTTP 200, returned as such. Recorded fixtures
   and replay tests in `tests/test_api.py`; CLAUDE.md gains the ESMIS specifics.
+- Seven catalog tasks, each an MCP tool and an HTTP route: `list_agencies`,
+  `search_publications` and `get_publication`, `list_releases` (newest first, with
+  `since`, `until` and `page`), `get_release`, `get_latest_release` and
+  `list_release_files` (each file's URL, name and format, the model `ReleaseFile`).
+  `meta.endpoint` names the operationId, `meta.total` upstream's count for the paged
+  lists, `meta.vintage` the release id; `meta.published_at` stays empty at this core
+  pin. An unknown identifier raises `NotFoundError` where one record is asked for and
+  gives the empty list from `list_releases`.
+- `download_release_file(release_id, format, dest)`, a bulk task in `BULK_TASKS`,
+  Python only: it streams one file of a release to the path the caller names with
+  core's `download`, nothing cached, `meta.endpoint` the file's name as upstream prints
+  it (`wasde1026.txt`). Replay tests for every task, the tools called end to end, the
+  October 2026 WASDE `.txt` recorded whole for the download's replay, and live tests
+  for every task and for the release order the release tasks rely on.
 
 ### Changed
 
