@@ -21,6 +21,12 @@ All notable changes to this project are documented here. The format follows
 - Attribution: the README and `docs/upstream/FETCHED.md` state that the ESMIS
   documentation and release files are works of the United States Government, in the
   public domain in the United States (17 U.S.C. § 105), and cite USDA's policy page.
+- Endpoint wrappers for the twelve operations of the ESMIS catalog (agencies,
+  publications, releases) under `xippios.usda.esmis.api`, the models `Agency`, `Pager`,
+  `Publication`, `Release`, `PublicationResults` and `ReleaseResults` typed as the wire
+  sends them, and the client's `classify`: an unknown id is `NotFoundError`, an
+  identifier carrying `/`, which ESMIS refuses, `InvalidRequestError`. Recorded fixtures
+  and replay tests in `tests/test_api.py`; CLAUDE.md gains the ESMIS specifics.
 
 ### Changed
 

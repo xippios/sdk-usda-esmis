@@ -20,6 +20,50 @@ The snapshot in `docs/upstream/` is the reference for names, parameters and sema
 If it is empty or stale, run `/refresh-upstream` first and review the diff. Never write a
 wrapper from memory of the API.
 
+## ESMIS specifics
+
+- **Reference.** `docs/upstream/openapi/esmis_public_api.yaml` (OpenAPI 3.0.0, twelve GET
+  operations) is the reference for operation names, paths, parameters and schema names.
+  Where the live API answers differently, the wire wins for types; README's section
+  "Where the live API deviates from its OpenAPI document" lists the differences, and
+  `models.py` and `tests/fixtures/` show them.
+- **Wrappers.** Every operation sits under `/api/v1/` on `https://esmis.nal.usda.gov`. A
+  module and its function are the operationId snake_cased without the constant
+  `esmis_api_` prefix (`esmis_api_release_findByPubId` is `api.release_find_by_pub_id`),
+  since `xippios.usda.esmis.api` already is that namespace; the tasks will name the full
+  operationId in `meta.endpoint`. Path parameters are quoted whole (`safe=""`); the id
+  parameters are integers, as the document types them, while every `id` in an answer is
+  a string. Release `files` are absolute URLs on the same host.
+- **Pagination.** `page` is 0-based with 25 items a page, a size no parameter changes;
+  `pager.total_results` is upstream's count, the value for `meta.total` (ADR-0012). A
+  page past the last answers empty `results` with `current_page` clamped to the last
+  page. Order is observed, not documented: all releases by id, highest first; a
+  publication's releases by `release_datetime`, latest first; the publication list in
+  neither order. `publication_search` with an empty `query` answers `"pager": []`,
+  which `PublicationResults.pager` takes as `()`.
+- **Absence and refusals** (`_client.classify`). An unknown id answers HTTP 404
+  `{"message": ""}`, raised as `NotFoundError`. An unknown identifier answers HTTP 200
+  with empty `results`; the wrappers return it as such, and how the tasks report it is
+  decided in the tasks round. An identifier carrying `/` (`Market and Trade Economics
+  Division/FDS`) cannot be looked up: ESMIS's web server refuses `%2F` with an HTML 404,
+  raised as `InvalidRequestError`, and a raw slash is no route; the publications
+  recorded with one carry another identifier without it (`FDS`).
+- **Release times.** The API prints `release_datetime` with `+0000`, but upstream's own
+  calendar and file times put the release at noon Eastern (README, the zone-label
+  item). Decided by Johannes on 2026-10-27: `Release.release_datetime` keeps the time as
+  printed, an aware datetime at `+00:00`; a task's `meta.published_at` carries the
+  wall-clock time with the offset dropped and `published_at_naive=True` once the core
+  pin carries ADR-0022's flag, and stays empty before; `meta.vintage` is the release id.
+- **A catalog, never a parser** (ADR-0020). This package lists publications, releases
+  and their files, and is to download a file; it never parses one. Parser packages such
+  as `xippios-usda-wasde` depend on its tasks and models, never on `api/` or `_client`
+  (ADR-0021). `download_release_file` is to be its one bulk task, named in `BULK_TASKS`
+  and skipped by the adapters (ADR-0019); it comes with the core re-pin.
+- **The core pin.** The package builds on `xippios-core~=0.2.1` from PyPI so far. The
+  tasks build on a git pin of core 0.3.0 that carries ADR-0019's `download`, set in
+  `[tool.uv.sources]` by the re-pin; a PR of its own replaces the pin with
+  `xippios-core~=0.3.0` from PyPI before the release (conventions §12).
+
 ## Read first, in this order
 
 1. `docs/upstream/FETCHED.md` and the files it lists: what the upstream actually offers
@@ -68,6 +112,7 @@ tests/
   test_family.py   core's family check, one line: namespace levels, py.typed, __version__,
                    the adapters serving exactly the tasks, task shapes and docstrings, the
                    README status table, the template tag, the core bound
+  test_api.py      replay tests for the endpoint wrappers, one or more per operation
   test_tasks.py    per-task replay tests
   test_live.py     @pytest.mark.live smoke tests, one per task
 docs/upstream/     documentation snapshot and FETCHED.md
