@@ -128,7 +128,7 @@ class Pager(UpstreamModel):
 
     Shape from every recorded ``PublicationResults`` and ``ReleaseResults`` answer: four
     JSON integers. ``page`` is 0-based and a page holds 25 items, a fixed size no
-    parameter changes. A page past the last answers empty ``results`` with
+    documented parameter changes. A page past the last answers empty ``results`` with
     ``current_page`` clamped to the last page: ``tests/fixtures/publication_find_all/
     page500.json`` asked for page 500 and answered ``current_page`` 100 of
     ``total_pages`` 101.

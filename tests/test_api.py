@@ -8,6 +8,7 @@ redacted, never a request kept from ``route.calls``.
 """
 
 import importlib
+import inspect
 import json
 import re
 from collections.abc import Awaitable, Callable
@@ -96,10 +97,58 @@ def operations() -> dict[str, str]:
     return found
 
 
+def snake(name: str) -> str:
+    """``publicationIdentifier`` -> ``publication_identifier``."""
+    return re.sub(r"(?<=[a-z])([A-Z])", r"_\1", name).lower()
+
+
 def wrapper_name(operation_id: str) -> str:
     """``esmis_api_publication_findByIdentifier`` -> ``publication_find_by_identifier``."""
-    name = operation_id.removeprefix("esmis_api_")
-    return re.sub(r"(?<=[a-z])([A-Z])", r"_\1", name).lower()
+    return snake(operation_id.removeprefix("esmis_api_"))
+
+
+def snapshot_parameters() -> dict[str, list[dict[str, str]]]:
+    """Each operationId's parameters as the snapshot declares them, ``$ref`` resolved.
+
+    A reader of this document's layout only: ``components.parameters`` by name, then each
+    path's ``parameters`` list, ``$ref`` items and inline ones (``query``), with their
+    ``name``, ``in``, ``required``, schema ``type`` and ``default`` as text.
+    """
+    components: dict[str, dict[str, str]] = {}
+    found: dict[str, list[dict[str, str]]] = {}
+    declared: list[dict[str, str]] = []
+    section = part = ""
+    current: dict[str, str] | None = None
+    field = re.compile(r"\s+(name|in|required|type|default): (\S+)")
+    for line in SNAPSHOT.read_text(encoding="utf-8").splitlines():
+        if match := re.fullmatch(r"(\w+):.*", line):
+            section, current = match.group(1), None
+        elif section == "components":
+            if match := re.fullmatch(r"  (\w+):", line):
+                part, current = match.group(1), None
+            elif part == "parameters" and (match := re.fullmatch(r"    (\w+):", line)):
+                current = components[match.group(1)] = {}
+            elif part == "parameters" and current is not None and (match := field.fullmatch(line)):
+                current[match.group(1)] = match.group(2)
+        elif section == "paths":
+            ref = re.fullmatch(r'        - \$ref: "#/components/parameters/(\w+)"', line)
+            if ref:
+                declared.append(components[ref.group(1)])
+                current = None
+            elif match := re.fullmatch(r"        - name: (\w+)", line):
+                current = {"name": match.group(1)}
+                declared.append(current)
+            elif line == "      responses:":
+                current = None
+            elif match := re.fullmatch(r"      operationId: (\S+)", line):
+                found[match.group(1)] = declared
+                declared, current = [], None
+            elif current is not None and (match := field.fullmatch(line)):
+                current[match.group(1)] = match.group(2)
+    return found
+
+
+TYPES: dict[str, type] = {"integer": int, "string": str}
 
 
 def test_one_wrapper_per_operation() -> None:
@@ -116,6 +165,35 @@ def test_one_wrapper_per_operation() -> None:
         assert module.__doc__ is not None
         assert f"``GET {path}``" in module.__doc__
         assert f"``{operation_id}``" in module.__doc__
+
+
+def test_wrapper_signatures_follow_the_document() -> None:
+    """Each wrapper takes exactly its operation's parameters, snake_cased, typed as the
+    document types them; a required one has no default, ``page`` upstream's ``0``."""
+    found = snapshot_parameters()
+    assert sorted(found) == sorted(operations())
+    assert sum(len(declared) for declared in found.values()) == 15
+    for operation_id, declared in found.items():
+        signature = inspect.signature(getattr(api, wrapper_name(operation_id)))
+        expected = {snake(parameter["name"]): parameter for parameter in declared}
+        assert set(signature.parameters) == set(expected), operation_id
+        for name, parameter in signature.parameters.items():
+            documented = expected[name]
+            kind = TYPES[documented["type"]]
+            assert parameter.annotation is kind, (operation_id, name)
+            if documented.get("required") == "true":
+                assert parameter.default is inspect.Parameter.empty, (operation_id, name)
+            else:
+                assert parameter.default == kind(documented["default"]), (operation_id, name)
+    assert {p["name"]: p["in"] for d in found.values() for p in d} == {
+        "agencyAcronym": "path",
+        "agencyId": "path",
+        "page": "query",
+        "publicationId": "path",
+        "publicationIdentifier": "path",
+        "releaseId": "path",
+        "query": "query",
+    }
 
 
 async def test_agency_find_all(replay_fixture: ReplayFixture) -> None:
@@ -410,11 +488,46 @@ async def test_publication_find_by_identifier_with_a_slash(replay_fixture: Repla
         await api.publication_find_by_identifier(SLASHED)
     assert sent_urls(route) == [sent]
     assert recorded_url("publication_find_by_identifier", "with_slash") == sent
-    assert "carries '/'" in str(info.value)
+    assert str(info.value) == (
+        "ESMIS's web server refused GET /api/v1/publication/findByIdentifier/"
+        "Market%20and%20Trade%20Economics%20Division%2FFDS with HTTP 404: it does not "
+        "accept an encoded slash (%2F) in a path, so a value carrying '/' cannot be looked "
+        "up. Pass one without '/'; a publication can also be found by another of its "
+        "identifiers or by its id."
+    )
     assert "esmis.nal.usda.gov" not in str(info.value)
     fixture = load_fixture(FIXTURES / "publication_find_by_identifier" / "with_slash.json")
     assert fixture.response.status == 404
     assert dict(fixture.response.headers)["content-type"].startswith("text/html")
+    assert "<title>404 Not Found</title>" in fixture.response.body
+
+
+def test_classify_keys_the_slash_refusal_on_both_sides() -> None:
+    """The refusal needs both the encoded slash sent and the web server's HTML 404: a JSON
+    404 for a path with ``%2F``, or an HTML 404 for a path without, is ``NotFoundError``."""
+    fixture = load_fixture(FIXTURES / "publication_find_by_identifier" / "with_slash.json")
+    refused = response_from_fixture(fixture)
+    assert isinstance(classify(refused), InvalidRequestError)
+    acronym = httpx.Request("GET", f"{API}/agency/findByAcronym/AMS%2FDA")
+    json_404 = httpx.Response(404, json={"message": ""}, request=acronym)
+    assert type(classify(json_404)) is NotFoundError
+    plain = httpx.Request("GET", f"{API}/publication/findByIdentifier/FDS")
+    html_404 = httpx.Response(
+        404,
+        headers={"content-type": "text/html; charset=iso-8859-1"},
+        content=fixture.response.content,
+        request=plain,
+    )
+    assert type(classify(html_404)) is NotFoundError
+    refused_acronym = httpx.Response(
+        404,
+        headers={"content-type": "text/html; charset=iso-8859-1"},
+        content=fixture.response.content,
+        request=acronym,
+    )
+    error = classify(refused_acronym)
+    assert isinstance(error, InvalidRequestError)
+    assert "GET /api/v1/agency/findByAcronym/AMS%2FDA with HTTP 404" in str(error)
 
 
 async def test_publication_search(replay_fixture: ReplayFixture) -> None:

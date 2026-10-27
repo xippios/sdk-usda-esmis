@@ -11,9 +11,11 @@ pages, the latest ``release_datetime`` first), the same answer as
 HTTP 200 with empty ``results`` and every pager count ``0`` (``unknown.json``), returned
 as such, where ``esmis_api_release_findByPubId`` answers an unknown id with a 404.
 
-The identifier is URL-quoted with ``safe=""``; one carrying ``/`` is refused by ESMIS's
-web server, as recorded for ``esmis_api_publication_findByIdentifier``, and
-``_client.classify`` raises it as ``InvalidRequestError``.
+The identifier is URL-quoted with ``safe=""``. The refusal of one carrying ``/`` is
+carried over from ``esmis_api_publication_findByIdentifier``, where it is recorded
+(``tests/fixtures/publication_find_by_identifier/with_slash.json``); it is not recorded
+here. The same web server answers both paths, so ``_client.classify`` would raise it as
+``InvalidRequestError`` here too.
 """
 
 from urllib.parse import quote
@@ -40,7 +42,8 @@ async def release_find_by_identifier(publication_identifier: str, page: int = 0)
         The page's ``pager`` and its releases.
 
     Raises:
-        InvalidRequestError: The identifier carries ``/``, which ESMIS refuses.
+        InvalidRequestError: The identifier carries ``/``, which ESMIS refuses, as recorded
+            for the publication lookup by identifier.
     """
     path = f"/api/v1/release/findByIdentifier/{quote(publication_identifier, safe='')}"
     raw = await client.get_json(path, params={"page": page})

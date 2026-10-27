@@ -34,13 +34,18 @@ wrapper from memory of the API.
   operationId in `meta.endpoint`. Path parameters are quoted whole (`safe=""`); the id
   parameters are integers, as the document types them, while every `id` in an answer is
   a string. Release `files` are absolute URLs on the same host.
-- **Pagination.** `page` is 0-based with 25 items a page, a size no parameter changes;
-  `pager.total_results` is upstream's count, the value for `meta.total` (ADR-0012). A
-  page past the last answers empty `results` with `current_page` clamped to the last
-  page. Order is observed, not documented: all releases by id, highest first; a
-  publication's releases by `release_datetime`, latest first; the publication list in
-  neither order. `publication_search` with an empty `query` answers `"pager": []`, which
-  `PublicationResults.pager` takes as `()`.
+- **Pagination.** `page` is 0-based with 25 items a page, a size no documented parameter
+  changes; `pager.total_results` is upstream's count, the value for `meta.total`
+  (ADR-0012). A page past the last answers empty `results` with `current_page` clamped
+  to the last page. `publication_search` with an empty `query` answers `"pager": []`,
+  which `PublicationResults.pager` takes as `()`.
+- **Order**, observed, not documented. `/release/findAll` is creation order, highest id
+  first: the newest created, not the newest released (page 0 runs 2026-10-26,
+  2026-10-09, 2026-10-23). Within a publication the ids do not follow the dates: WASDE's
+  96169, 96170 and 96171 are August, July and June 2025, and 95482 to 95486 rise while
+  the dates fall; its releases come latest `release_datetime` first, as recorded on its
+  page 0 only (`release_find_by_identifier/wasde_page0.json`). Publication lists follow
+  no id order.
 - **The publication walk** (2026-10-27, `/publication/findAll` pages 0 to 100, 101
   calls): 2522 publications, ids distinct strings of digits, every `Publication` field
   on all of them but `publication_agency_export_1` (on none). `status`, `subscribable`
@@ -74,7 +79,7 @@ wrapper from memory of the API.
 - **The core pin.** The package builds on `xippios-core~=0.2.1` from PyPI so far. The
   tasks build on a git pin of core 0.3.0 that carries ADR-0019's `download`, set in
   `[tool.uv.sources]` by the re-pin; a PR of its own replaces the pin with
-  `xippios-core~=0.3.0` from PyPI before the release (conventions §12).
+  `xippios-core~=0.3.0` from PyPI before the release (conventions §15, item 1).
 
 ## Read first, in this order
 

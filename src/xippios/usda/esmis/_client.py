@@ -49,21 +49,45 @@ def _upstream_message(response: httpx.Response) -> str:
     return message.strip() if isinstance(message, str) else ""
 
 
-def _encoded_slash(request: httpx.Request) -> bool:
-    """Whether the request's path, its query left aside, carries an encoded slash."""
-    path = request.url.raw_path.split(b"?", 1)[0]
-    return b"%2f" in path.lower()
+APACHE_NOT_FOUND = "<title>404 Not Found</title>"
+"""The title of the web server's own 404 page, which the catalog's answers never carry:
+the catalog answers JSON, and Drupal's HTML 404 is titled "Page not found"."""
+
+
+def _sent_path(request: httpx.Request) -> str:
+    """The request's path as sent, percent-escapes kept, its query left aside."""
+    return request.url.raw_path.split(b"?", 1)[0].decode("ascii")
+
+
+def _slash_refused(response: httpx.Response) -> bool:
+    """Whether this is the web server's refusal of an encoded slash in the path.
+
+    Both sides of the recorded answer
+    (``tests/fixtures/publication_find_by_identifier/with_slash.json``): a request whose
+    path carries ``%2F``, and a 404 with a ``text/html`` body, the web server's own page,
+    not the catalog's JSON.
+    """
+    if "%2f" not in _sent_path(response.request).lower():
+        return False
+    if not response.headers.get("content-type", "").startswith("text/html"):
+        return False
+    try:
+        body = response.text
+    except (httpx.ResponseNotRead, UnicodeDecodeError):
+        return False
+    return APACHE_NOT_FOUND in body
 
 
 def classify(response: httpx.Response) -> XippiosError | None:
     """The catalog's error answers as recorded, mapped once (ADR-0008).
 
-    The OpenAPI document documents no error answer but a 500 (``ServerError``), so the
-    recorded answers are the reference:
+    The OpenAPI document defines one error response, ``ServerError`` ("Internal server
+    error."), which no operation references, so the recorded answers are the reference:
 
-    - 404 for a path with an encoded slash (``%2F``) is ``InvalidRequestError``, upstream's
-      refusal of the request as given (conventions §5): ESMIS's web server answers it
-      with its own HTML page before the catalog sees it
+    - 404 for a path with an encoded slash (``%2F``), answered with the web server's own
+      HTML page (``text/html``, titled ``404 Not Found``), is ``InvalidRequestError``,
+      upstream's refusal of the request as given (conventions §5): ESMIS's web server
+      answers it before the catalog sees it
       (``tests/fixtures/publication_find_by_identifier/with_slash.json``). A raw slash
       is no route either: probed on 2026-10-27, Drupal answered its HTML "Page not
       found", which falls under the next rule; the wrappers never send one. So an
@@ -89,11 +113,12 @@ def classify(response: httpx.Response) -> XippiosError | None:
     path = request.url.path
     if response.status_code != 404 or not path.startswith(API_PREFIX):
         return None
-    if _encoded_slash(request):
+    if _slash_refused(response):
         return InvalidRequestError(
-            f"ESMIS cannot look up a path segment that carries '/': {request.method} {path} "
-            "(HTTP 404 from its web server, which refuses an encoded slash). Use an "
-            "identifier without '/', another of the publication's identifiers, or its id.",
+            f"ESMIS's web server refused {request.method} {_sent_path(request)} with HTTP "
+            "404: it does not accept an encoded slash (%2F) in a path, so a value carrying "
+            "'/' cannot be looked up. Pass one without '/'; a publication can also be found "
+            "by another of its identifiers or by its id.",
             source=SOURCE,
         )
     message = _upstream_message(response)
