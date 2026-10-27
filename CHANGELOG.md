@@ -18,3 +18,12 @@ All notable changes to this project are documented here. The format follows
   of the release calendar, with `FETCHED.md` recording every fetch.
 - README and CLAUDE.md name ESMIS in full; the README lists where the live API deviates
   from its OpenAPI document, as probed on 2026-10-27.
+
+### Changed
+
+- Development pin: `xippios-core` comes from sdk-core commit `787b60c` on `main`
+  (`core_git_ref`, `[tool.uv.sources]`; `core_version` stays 0.2.1), which carries the
+  api.data.gov gateway module (C14) and `AsyncClient.download` for bulk files (C15,
+  ADR-0019) that the release tasks need before core releases them; the pin rule of the
+  family roadmap §3. The pin is removed, and `core_version` raised to the release that
+  carries both, in a PR of its own before this package's first release.

@@ -3,7 +3,7 @@ _commit: v0.2.2
 _src_path: https://github.com/xippios/sdk-template.git
 api_base_url: https://esmis.nal.usda.gov
 api_key_env: ''
-core_git_ref: ''
+core_git_ref: 787b60cab89918a3ef7946065ba02e6bc5f20f9e
 core_version: 0.2.1
 domain_topic: agriculture
 import_path: usda.esmis
