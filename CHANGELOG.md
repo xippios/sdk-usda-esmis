@@ -23,7 +23,8 @@ All notable changes to this project are documented here. The format follows
 
 - Development pin: `xippios-core` comes from sdk-core commit `787b60c` on `main`
   (`core_git_ref`, `[tool.uv.sources]`; `core_version` stays 0.2.1), which carries the
-  api.data.gov gateway module (C14) and `AsyncClient.download` for bulk files (C15,
-  ADR-0019) that the release tasks need before core releases them; the pin rule of the
-  family roadmap §3. The pin is removed, and `core_version` raised to the release that
-  carries both, in a PR of its own before this package's first release.
+  api.data.gov gateway module (C14, unused by this keyless source) and
+  `AsyncClient.download` for bulk files (C15, ADR-0019), which the release tasks need
+  before core releases it; the pin rule of the family roadmap §3. The pin is removed, and
+  `core_version` raised to the release that carries both, in a PR of its own before this
+  package's first release.
