@@ -1,14 +1,12 @@
 """Packaged value lists for USDA ESMIS (conventions §3): none.
 
-The scaffold's machinery for value lists, ``reference/<name>.json`` as
-``{"param", "fetched", "values"}``, read by ``packaged_values``. ESMIS packages no value
-list: its two packaged files, ``reference/publication.json`` and
-``reference/agency.json``, are tables in core's ``PackagedList`` shape (records, not
-values), which ``tasks.py`` reads directly with ``PackagedList.load``, the reader that
-builds an answer's ``meta`` (ADR-0022); ``packaged_values`` could not read them, so
-``PACKAGED_LISTS`` stays empty. Template v0.3.0, unreleased, renders ``PackagedList`` in
-place of this machinery; ``scripts/refresh_reference.py`` writes the files and
-``reference/README.md`` carries their provenance.
+The scaffold's ``packaged_values`` reads value-list files, ``reference/<name>.json`` as
+``{"param", "fetched", "values"}``. ESMIS packages no value list: its two packaged files,
+``reference/publication.json`` and ``reference/agency.json``, are tables in core's
+``PackagedList`` shape (records, not values), which ``tasks.py`` reads with
+``PackagedList.load``, the reader that builds an answer's ``meta`` (ADR-0022), so
+``PACKAGED_LISTS`` stays empty (queue row 101). ``scripts/refresh_reference.py`` writes
+the files and ``reference/README.md`` carries their provenance.
 """
 
 from datetime import date
