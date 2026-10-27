@@ -122,8 +122,8 @@ wrapper from memory of the API.
 - **Core.** The package depends on `xippios-core` 0.3.0 from PyPI (`core_version`
   0.3.0, `~=0.3.0`; template v0.2.2), which carries ADR-0019's `download` and
   `BULK_TASKS` skip and ADR-0022's `published_at_naive`. The adoption of template v0.3.0
-  follows as a PR of its own (conventions §15); until then `BULK_TASKS` and the
-  `render_enums` call in `scripts/refresh_reference.py` are written by hand.
+  follows as a PR of its own (conventions §15); until then `BULK_TASKS` is written by
+  hand.
 
 ## Read first, in this order
 
