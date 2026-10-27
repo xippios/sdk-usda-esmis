@@ -20,6 +20,93 @@ The snapshot in `docs/upstream/` is the reference for names, parameters and sema
 If it is empty or stale, run `/refresh-upstream` first and review the diff. Never write a
 wrapper from memory of the API.
 
+## ESMIS specifics
+
+- **Reference.** `docs/upstream/openapi/esmis_public_api.yaml` (OpenAPI 3.0.0, twelve
+  GET operations) is the reference for operation names, paths, parameters and schema
+  names. Where the live API answers differently, the wire wins for types; README's
+  section "Where the live API deviates from its OpenAPI document" lists the differences,
+  and `models.py` and `tests/fixtures/` show them.
+- **Wrappers.** Every operation sits under `/api/v1/` on `https://esmis.nal.usda.gov`. A
+  module and its function are the operationId snake_cased without the constant
+  `esmis_api_` prefix (`esmis_api_release_findByPubId` is `api.release_find_by_pub_id`),
+  since `xippios.usda.esmis.api` already is that namespace; the tasks name the full
+  operationId in `meta.endpoint`. Path parameters are quoted whole (`safe=""`); the id
+  parameters are integers, as the document types them, while every `id` in an answer is
+  a string. Release `files` are absolute URLs on the same host.
+- **Pagination.** `page` is 0-based with 25 items a page, a size no documented parameter
+  changes; `pager.total_results` is upstream's count, the value for `meta.total`
+  (ADR-0012). A page past the last answers empty `results` with `current_page` clamped
+  to the last page. `publication_search` with an empty `query` answers `"pager": []`,
+  which `PublicationResults.pager` takes as `()`.
+- **Order**, observed, not documented. `/release/findAll` is creation order, highest id
+  first: the newest created, not the newest released (page 0 runs 2026-10-26,
+  2026-10-09, 2026-10-23). Within a publication the ids do not follow the dates: WASDE's
+  96169, 96170 and 96171 are August, July and June 2025, and 95482 to 95486 rise while
+  the dates fall; its releases come latest `release_datetime` first, as recorded on its
+  pages 0 and 1 (`release_find_by_identifier/wasde_page0.json`, `wasde_page1.json`).
+  `list_releases` and `get_latest_release` rely on that order and say so in their
+  docstrings; the live test `test_page_zero_of_a_publication_is_newest_first` checks it
+  nightly. Publication lists follow no id order.
+- **The publication walk** (2026-10-27, `/publication/findAll` pages 0 to 100, 101
+  calls): 2522 publications, ids distinct strings of digits, every `Publication` field
+  on all of them but `publication_agency_export_1` (on none). `status`, `subscribable`
+  and `resource_type` hold only the document's values and are `StrEnum`; `frequency`
+  stays `str`, since publication 1172 prints `""`. 24 publications list
+  `upcoming_releases`, 67 times in all, each with an Eastern offset.
+- **Absence and refusals** (`_client.classify`), as recorded per lookup. An unknown id
+  answers HTTP 404 `{"message": ""}`, raised as `NotFoundError`, at `agency/findById`,
+  `publication/findById`, `release/findById` and `release/findByPubId`. An unknown name
+  answers HTTP 200 with nothing: `agency/findByAcronym` an empty array,
+  `publication/findByAgency`, `publication/findByIdentifier` and
+  `release/findByIdentifier` empty `results` with every pager count 0. The wrappers
+  return those as such; the tasks that return one record raise `NotFoundError` for them
+  (`get_publication`, `get_latest_release`; `get_release` through `classify`), and
+  `list_releases`, a list task, returns the empty list with `meta.total` 0. An
+  identifier carrying `/` (`Market and Trade Economics Division/FDS`) cannot be looked
+  up: ESMIS's web server refuses `%2F` with an HTML 404, raised as
+  `InvalidRequestError`, and a raw slash is no route; the publications recorded with one
+  carry another identifier without it (`FDS`).
+- **Release times.** The API prints `release_datetime` with `+0000`, but upstream's own
+  calendar and file times put the release at noon Eastern (README, the zone-label item),
+  and `Publication.upcoming_releases` print Eastern offsets (`2026-10-28T15:00:00-0400`,
+  `2026-11-04T15:00:00-0500`), which the model keeps. Decided by Johannes on 2026-10-27:
+  `Release.release_datetime` keeps the time as printed, an aware datetime at `+00:00`;
+  the four tasks about one release (`get_release`, `get_latest_release`,
+  `list_release_files`, `download_release_file`) set `meta.published_at` to that time
+  with the offset dropped (`.replace(tzinfo=None)`, the printed wall-clock time, never
+  converted) and `published_at_naive=True` (ADR-0022, rule 2); the list tasks leave it
+  empty. `meta.vintage` is the release id.
+- **Tasks.** Eight, the contract of `xippios-usda-wasde` (ADR-0021). A paged task given
+  `page` returns that page; without it, `tasks._Pages` walks the pages from 0 with core's
+  `paginate_offset` (`page = offset // 25`), bounded by the last answer's
+  `pager.total_pages`, an empty or a short page, and, for `list_releases`, the first
+  page whose oldest release is dated before `since`; never by the echoed
+  `current_page`. `list_releases` filters `since` and `until` on the printed date of
+  `release_datetime`, never converted, and its `meta.total` is upstream's count before
+  that filter. `get_latest_release` takes the latest `release_datetime` of page 0,
+  never the highest id. `meta.request` omits what the caller left `None`. `MCP_CAPS` is
+  empty, and the default cap (200 rows or 64 KB) can cut two tools called without
+  `page`: `list_releases` (703 rows for WASDE) and a broad `search_publications` (about
+  1.8 KB a publication, so after some 36 matches). Their docstrings tell an agent to
+  page, `list_releases`'s also to bound the call with `since` and `until`.
+- **A catalog, never a parser** (ADR-0020). This package lists publications, releases
+  and their files, and downloads a file; it never parses one. Parser packages such as
+  `xippios-usda-wasde` depend on its tasks and models, never on `api/` or `_client`
+  (ADR-0021). `download_release_file` is its one bulk task, named in `BULK_TASKS`
+  (hand-written until the template renders it) and skipped by core's
+  `register_tasks` and `router_from_tasks` (ADR-0019): it streams one file with core's
+  `download` to the path the caller names, `meta.endpoint` the file's name as upstream
+  prints it; nothing is stored or cached. The download budget: one small file, the
+  current WASDE `.txt` (about 120 KB), for the fixture (`release_files/
+  wasde1026_txt.json`, recorded whole) and for the nightly live test, which writes it
+  to a temporary directory.
+- **Core.** The package depends on `xippios-core` 0.3.0 from PyPI (`core_version`
+  0.3.0, `~=0.3.0`; template v0.2.2), which carries ADR-0019's `download` and
+  `BULK_TASKS` skip and ADR-0022's `published_at_naive`. The adoption of template v0.3.0
+  follows as a PR of its own (conventions §15); until then `BULK_TASKS` and the
+  `render_enums` call in `scripts/refresh_reference.py` are written by hand.
+
 ## Read first, in this order
 
 1. `docs/upstream/FETCHED.md` and the files it lists: what the upstream actually offers
@@ -52,8 +139,8 @@ src/xippios/usda/esmis/
   _client.py       the one configured AsyncClient (base URL, key, rate limit)
   models.py        pydantic models mirroring upstream payloads (UpstreamModel)
   api/             endpoint wrappers, one module per upstream operation
-  tasks.py         task functions; __all__ is what the adapters register, MCP_CAPS any
-                   per-tool result caps
+  tasks.py         task functions; __all__ minus BULK_TASKS is what the adapters
+                   register, MCP_CAPS any per-tool result caps
   mcp.py           xippios-usda-esmis-mcp entry point
   http.py          FastAPI router
   params.py        packaged value lists: PACKAGED_LISTS, packaged_values()
@@ -68,8 +155,11 @@ tests/
   test_family.py   core's family check, one line: namespace levels, py.typed, __version__,
                    the adapters serving exactly the tasks, task shapes and docstrings, the
                    README status table, the template tag, the core bound
-  test_tasks.py    per-task replay tests
-  test_live.py     @pytest.mark.live smoke tests, one per task
+  test_api.py      replay tests for the endpoint wrappers, one or more per operation
+  test_tasks.py    per-task replay tests, every tool called through the MCP server, the
+                   bulk task's absence from the server and the router
+  test_live.py     @pytest.mark.live smoke tests, one per task, the release-order check,
+                   the current WASDE .txt downloaded into a temporary directory
 docs/upstream/     documentation snapshot and FETCHED.md
 .github/workflows/ ci.yml (the required ci check, with the CHANGELOG and fixture-size steps),
                    publish.yml (the release train: tag, build, PyPI), live.yml (nightly live

@@ -20,13 +20,27 @@ No API key is needed.
 ## 30-second example
 
 ```python
-from xippios.usda.esmis import tasks
+from pathlib import Path
 
-# result = tasks.<task>(...)
-# result.data, result.meta.retrieved_at, result.meta.request
+from xippios.usda.esmis import download_release_file, get_latest_release, list_release_files
+
+latest = get_latest_release("wasde")  # the newest WASDE release
+latest.data.id, latest.data.release_datetime  # "796099", 2026-10-09 12:00:00+00:00, as printed
+latest.meta.vintage  # "796099": the release id
+latest.meta.published_at  # 2026-10-09 12:00:00, the printed time without its +0000
+latest.meta.published_at_naive  # True: upstream's text, no zone attached (ADR-0022)
+
+files = list_release_files(int(latest.data.id))
+[file.format for file in files.data]  # ["pdf", "txt", "xls", "xml"]
+
+# Python only, no MCP tool: streams the TXT to the path you name; nothing is cached
+txt = download_release_file(796099, "txt", Path("wasde1026.txt"))
+txt.data.path, txt.data.bytes, txt.data.content_type  # wasde1026.txt, 122378, "text/plain"
+txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 ```
 
-Task functions are listed in the status table below as they are added.
+`search_publications("wasde")` finds a publication's identifiers, and
+`list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, newest first.
 
 ## MCP
 
@@ -42,6 +56,7 @@ Task functions are listed in the status table below as they are added.
 
 Tools are read-only and named `usda_esmis_<verb>_<noun>`. Results are capped, at
 200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest.
+`download_release_file` is no tool and no route: a bulk task, Python only (ADR-0019).
 `--http` serves streamable HTTP instead of stdio.
 
 ## Status
@@ -54,29 +69,54 @@ exactly tasks.__all__ and tasks_write.__all__. -->
 
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
-| (none yet) | | | |
+| `esmis_api_agency_findAll` | `list_agencies()` | `usda_esmis_list_agencies` | alpha |
+| `esmis_api_publication_search`, every page unless `page` is given | `search_publications(query, page=None)` | `usda_esmis_search_publications` | alpha |
+| `esmis_api_publication_findByIdentifier` | `get_publication(publication_identifier)` | `usda_esmis_get_publication` | alpha |
+| `esmis_api_release_findByIdentifier`, pages walked newest first unless `page` is given | `list_releases(publication_identifier, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |
+| `esmis_api_release_findById` | `get_release(release_id)` | `usda_esmis_get_release` | alpha |
+| `esmis_api_release_findByIdentifier`, page 0 | `get_latest_release(publication_identifier)` | `usda_esmis_get_latest_release` | alpha |
+| `esmis_api_release_findById` | `list_release_files(release_id)` | `usda_esmis_list_release_files` | alpha |
+| `esmis_api_release_findById`, then the file | `download_release_file(release_id, format, dest)`, a bulk task | none, Python only | alpha |
 
 ## Where the live API deviates from its OpenAPI document (probed 2026-10-27)
 
 The OpenAPI document in `docs/upstream/openapi/esmis_public_api.yaml` is the reference
 for names and parameters; the live API answers differently in these points:
 
-- every `id` is a JSON string, not an integer;
+- every `id` is a JSON string, not an integer; the walk of every `/publication/findAll`
+  page on 2026-10-27 (pages 0 to 100) found 2522 publications with distinct ids, each a
+  string of digits;
 - `Publication.agency`, `.identifier` and `.agency_acronym` are arrays, not strings;
-- `agency_acronym` is absent on some publications, which carry
-  `publication_agency_export_1` instead;
+- `agency_acronym` is absent on the publications the four other publication operations
+  answer, which carry `publication_agency_export_1` instead; `/publication/findAll`
+  carried `agency_acronym` on all 2522 publications of the walk and
+  `publication_agency_export_1` on none;
+- `Publication.frequency` printed `""` on one publication of the walk (1172), a value
+  the document's enumeration does not list; `status`, `subscribable` and
+  `resource_type` held only the document's values;
 - the list wrapper has `filters`, `sorters` and `system` (`{"page_key": "page"}`)
   beside `pager` and `results`;
-- `/publication/search` without `query` answers 200 with `"pager": []`;
-- `/publication/findById` of an unknown id answers 404 `{"message": ""}`,
-  `/publication/findByIdentifier` of an unknown identifier answers 200 with empty
-  results; the agency and release lookups were not probed;
+- `/publication/search` without `query`, or with an empty one, answers 200 with
+  `"pager": []` and empty results, although the document makes `query` required;
+- absence answers differ per lookup, as recorded: an unknown id answers 404
+  `{"message": ""}` at `/agency/findById`, `/publication/findById`, `/release/findById`
+  and `/release/findByPubId`; an unknown name answers 200 with nothing,
+  `/agency/findByAcronym` an empty array, `/publication/findByAgency`,
+  `/publication/findByIdentifier` and `/release/findByIdentifier` empty results with
+  every pager count 0;
+- an identifier carrying `/` (`Market and Trade Economics Division/FDS`) cannot be
+  looked up: the web server answers `%2F` in a path with its own HTML 404, and a raw
+  slash is no route; every publication recorded with such an identifier has another
+  without it (`FDS`);
 - `page` is 0-based and a page holds 25 items, as the YAML's defaults say; undocumented
   are that the page size is fixed and that a page past the last answers empty results
   with `current_page` clamped;
-- release lists come newest first by id (descending), undocumented, with
-  `release_datetime` only mostly in that order (`/release/findAll` page 0 runs
-  2026-10-26, 2026-10-09, 2026-10-23); publication lists follow no id order
+- the orders are undocumented: `/release/findAll` comes highest id first, the newest
+  created, with `release_datetime` only mostly in that order (page 0 runs 2026-10-26,
+  2026-10-09, 2026-10-23); a publication's releases (`/release/findByIdentifier`) come
+  latest `release_datetime` first, as recorded on WASDE's pages 0 and 1 (50 releases,
+  2026-10-09 back to 2022-08-12), while their ids do not follow the dates (96169, 96170
+  and 96171 are August, July and June 2025); publication lists follow no id order
   (`/publication/findAll` page 0: ids 2425, 1801, 1861, 1922;
   `/publication/search?query=wasde`: 1762, 1831, 1154);
 - `release_datetime` is `YYYY-MM-DDTHH:MM:SS+0000` (a zone, no colon);
@@ -85,8 +125,10 @@ for names and parameters; the live API answers differently in these points:
   (`/sites/default/release-files/796099/wasde1026.txt`), older ones the hashed
   three-segment path the YAML's example shows
   (`/sites/default/release-files/8336h188j/2514qk05k/j0991c960/prog3925.pdf`);
-- `Publication.upcoming_releases` was `[]` on every sampled publication, and the YAML
-  lists no release-calendar operation;
+- `Publication.upcoming_releases` is `[]` on most publications: the walk found items on
+  24 of 2522, 67 in all, each printed with an Eastern offset
+  (`2026-10-28T15:00:00-0400` and `2026-11-04T15:00:00-0500` for publication 1863),
+  where `release_datetime` prints `+0000`; the YAML lists no release-calendar operation;
 - the zone label of release times: the API prints `release_datetime` with `+0000` and
   the release page its `datetime` with `Z` (`2026-10-09T12:00:00+0000` and
   `datetime="2026-10-09T12:00:00Z"` for the October 2026 WASDE), while the release
@@ -97,12 +139,14 @@ for names and parameters; the live API answers differently in these points:
   `HEAD /sites/default/release-files/796099/wasde1026.txt` with
   `Last-Modified: Fri, 09 Oct 2026 16:01:00 GMT`, 12:01 Eastern. The `+0000`/`Z` label
   is contradicted by upstream's own calendar and file timestamps, which fit a noon
-  Eastern wall-clock time; how `published_at` treats it was decided on 2026-10-27 and
-  lands with the tasks PR (ADR-0022);
+  Eastern wall-clock time (the recorded download of `wasde1026.txt` answers the same
+  `Last-Modified`); the tasks keep `release_datetime` as printed, and those about one
+  release put its wall-clock time, the `+0000` dropped, into `meta.published_at` with
+  `published_at_naive` set (ADR-0022; CLAUDE.md, release times);
 - the release calendar page (`docs/upstream/pages/release-calendar.md`) held 3776
   events, drawn from a `publication_upcoming_releases` field (each event's
-  `startField`), while the API's `Publication.upcoming_releases` answered `[]` for
-  every sampled publication; every calendar event is classed `fc-event-past`, future
+  `startField`), while the API's `Publication.upcoming_releases` lists 67 upcoming
+  releases on 24 publications; every calendar event is classed `fc-event-past`, future
   ones included, and WASDE's events stop at 2025-12-09.
 
 ## Upstream terms and attribution

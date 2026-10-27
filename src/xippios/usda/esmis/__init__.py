@@ -6,5 +6,25 @@ in ``_client`` are internal.
 """
 
 from xippios.usda.esmis._version import __version__
+from xippios.usda.esmis.tasks import (
+    download_release_file,
+    get_latest_release,
+    get_publication,
+    get_release,
+    list_agencies,
+    list_release_files,
+    list_releases,
+    search_publications,
+)
 
-__all__ = ["__version__"]
+__all__ = [
+    "__version__",
+    "download_release_file",
+    "get_latest_release",
+    "get_publication",
+    "get_release",
+    "list_agencies",
+    "list_release_files",
+    "list_releases",
+    "search_publications",
+]

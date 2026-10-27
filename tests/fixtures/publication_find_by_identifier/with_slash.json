@@ -1,0 +1,37 @@
+{
+  "recorded_at": "2026-10-27T12:05:41.463782Z",
+  "request": {
+    "body": null,
+    "body_base64": false,
+    "content_type": null,
+    "method": "GET",
+    "url": "https://esmis.nal.usda.gov/api/v1/publication/findByIdentifier/Market%20and%20Trade%20Economics%20Division%2FFDS"
+  },
+  "response": {
+    "body": "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\n<p>The requested URL was not found on this server.</p>\n</body></html>\n",
+    "body_base64": false,
+    "headers": [
+      [
+        "date",
+        "Tue, 27 Oct 2026 12:05:39 GMT"
+      ],
+      [
+        "content-type",
+        "text/html; charset=iso-8859-1"
+      ],
+      [
+        "server",
+        "Apache"
+      ],
+      [
+        "x-backend-server",
+        "1"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000; includeSubDomains; preload"
+      ]
+    ],
+    "status": 404
+  }
+}
