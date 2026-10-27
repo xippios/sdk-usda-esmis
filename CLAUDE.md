@@ -94,18 +94,18 @@ wrapper from memory of the API.
   and their files, and downloads a file; it never parses one. Parser packages such as
   `xippios-usda-wasde` depend on its tasks and models, never on `api/` or `_client`
   (ADR-0021). `download_release_file` is its one bulk task, named in `BULK_TASKS`
-  (hand-written until the template renders it) and skipped by the pinned core's
+  (hand-written until the template renders it) and skipped by core's
   `register_tasks` and `router_from_tasks` (ADR-0019): it streams one file with core's
   `download` to the path the caller names, `meta.endpoint` the file's name as upstream
   prints it; nothing is stored or cached. The download budget: one small file, the
   current WASDE `.txt` (about 120 KB), for the fixture (`release_files/
   wasde1026_txt.json`, recorded whole) and for the nightly live test, which writes it
   to a temporary directory.
-- **The core pin.** The package builds on a git pin of sdk-core `main` at `cb8ecdf`,
-  set in `[tool.uv.sources]` (`core_version` stays 0.2.1), which carries ADR-0019's
-  `download` and `BULK_TASKS` skip and ADR-0022's `published_at_naive`. The pin goes at
-  the adoption of template v0.3.0 and core 0.3.0, which release them: a PR of its own,
-  before the release, takes core from PyPI (conventions §15, item 1).
+- **Core.** The package depends on `xippios-core` 0.3.0 from PyPI (`core_version`
+  0.3.0, `~=0.3.0`; template v0.2.2), which carries ADR-0019's `download` and
+  `BULK_TASKS` skip and ADR-0022's `published_at_naive`. The adoption of template v0.3.0
+  follows as a PR of its own (conventions §15); until then `BULK_TASKS` and the
+  `render_enums` call in `scripts/refresh_reference.py` are written by hand.
 
 ## Read first, in this order
 
