@@ -38,9 +38,9 @@ not produce are removed; ``FETCHED.md`` is rewritten; nothing else under
 ``docs/upstream/`` is touched. Against the same upstream, two runs write byte-identical
 files, but for the calendar excerpt, and ``FETCHED.md`` differs in its ``Fetched``
 column, the UTC time the run started, and in the validators of any page Drupal rendered
-anew in between (``FETCHED.md`` says how). The script stops if a page it reads starts to state
-a copyright, a licence or terms of use, which ``FETCHED.md``'s Attribution says none
-does. The API needs no key, and none is sent or read. Run from the repository root::
+anew in between (``FETCHED.md`` says how). The script stops if a page it reads starts to
+state a copyright, a licence or terms of use, which ``FETCHED.md``'s Attribution says
+none does. The API needs no key, and none is sent or read. Run from the repository root::
 
     uv run scripts/refresh_upstream.py
 """
