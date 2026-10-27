@@ -22,11 +22,11 @@ wrapper from memory of the API.
 
 ## ESMIS specifics
 
-- **Reference.** `docs/upstream/openapi/esmis_public_api.yaml` (OpenAPI 3.0.0, twelve GET
-  operations) is the reference for operation names, paths, parameters and schema names.
-  Where the live API answers differently, the wire wins for types; README's section
-  "Where the live API deviates from its OpenAPI document" lists the differences, and
-  `models.py` and `tests/fixtures/` show them.
+- **Reference.** `docs/upstream/openapi/esmis_public_api.yaml` (OpenAPI 3.0.0, twelve
+  GET operations) is the reference for operation names, paths, parameters and schema
+  names. Where the live API answers differently, the wire wins for types; README's
+  section "Where the live API deviates from its OpenAPI document" lists the differences,
+  and `models.py` and `tests/fixtures/` show them.
 - **Wrappers.** Every operation sits under `/api/v1/` on `https://esmis.nal.usda.gov`. A
   module and its function are the operationId snake_cased without the constant
   `esmis_api_` prefix (`esmis_api_release_findByPubId` is `api.release_find_by_pub_id`),
@@ -39,24 +39,33 @@ wrapper from memory of the API.
   page past the last answers empty `results` with `current_page` clamped to the last
   page. Order is observed, not documented: all releases by id, highest first; a
   publication's releases by `release_datetime`, latest first; the publication list in
-  neither order. `publication_search` with an empty `query` answers `"pager": []`,
-  which `PublicationResults.pager` takes as `()`.
+  neither order. `publication_search` with an empty `query` answers `"pager": []`, which
+  `PublicationResults.pager` takes as `()`.
+- **The publication walk** (2026-10-27, `/publication/findAll` pages 0 to 100, 101
+  calls): 2522 publications, ids distinct strings of digits, every `Publication` field
+  on all of them but `publication_agency_export_1` (on none). `status`, `subscribable`
+  and `resource_type` hold only the document's values and are `StrEnum`; `frequency`
+  stays `str`, since publication 1172 prints `""`. 24 publications list
+  `upcoming_releases`, 67 times in all, each with an Eastern offset.
 - **Absence and refusals** (`_client.classify`), as recorded per lookup. An unknown id
   answers HTTP 404 `{"message": ""}`, raised as `NotFoundError`, at `agency/findById`,
   `publication/findById`, `release/findById` and `release/findByPubId`. An unknown name
   answers HTTP 200 with nothing: `agency/findByAcronym` an empty array,
   `publication/findByAgency`, `publication/findByIdentifier` and
   `release/findByIdentifier` empty `results` with every pager count 0. The wrappers
-  return those as such; how the tasks report them is decided in the tasks round. An identifier carrying `/` (`Market and Trade Economics
-  Division/FDS`) cannot be looked up: ESMIS's web server refuses `%2F` with an HTML 404,
-  raised as `InvalidRequestError`, and a raw slash is no route; the publications
-  recorded with one carry another identifier without it (`FDS`).
+  return those as such; how the tasks report them is decided in the tasks round. An
+  identifier carrying `/` (`Market and Trade Economics Division/FDS`) cannot be looked
+  up: ESMIS's web server refuses `%2F` with an HTML 404, raised as
+  `InvalidRequestError`, and a raw slash is no route; the publications recorded with one
+  carry another identifier without it (`FDS`).
 - **Release times.** The API prints `release_datetime` with `+0000`, but upstream's own
-  calendar and file times put the release at noon Eastern (README, the zone-label
-  item). Decided by Johannes on 2026-10-27: `Release.release_datetime` keeps the time as
-  printed, an aware datetime at `+00:00`; a task's `meta.published_at` carries the
-  wall-clock time with the offset dropped and `published_at_naive=True` once the core
-  pin carries ADR-0022's flag, and stays empty before; `meta.vintage` is the release id.
+  calendar and file times put the release at noon Eastern (README, the zone-label item),
+  and `Publication.upcoming_releases` print Eastern offsets (`2026-10-28T15:00:00-0400`,
+  `2026-11-04T15:00:00-0500`), which the model keeps. Decided by Johannes on 2026-10-27:
+  `Release.release_datetime` keeps the time as printed, an aware datetime at `+00:00`; a
+  task's `meta.published_at` carries the wall-clock time with the offset dropped and
+  `published_at_naive=True` once the core pin carries ADR-0022's flag, and stays empty
+  before; `meta.vintage` is the release id.
 - **A catalog, never a parser** (ADR-0020). This package lists publications, releases
   and their files, and is to download a file; it never parses one. Parser packages such
   as `xippios-usda-wasde` depend on its tasks and models, never on `api/` or `_client`

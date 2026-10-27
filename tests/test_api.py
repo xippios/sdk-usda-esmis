@@ -11,7 +11,8 @@ import importlib
 import json
 import re
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
+from enum import StrEnum
 from pathlib import Path
 
 import httpx
@@ -29,6 +30,9 @@ from xippios.usda.esmis.models import (
     PublicationResults,
     Release,
     ReleaseResults,
+    ResourceType,
+    Status,
+    Subscribable,
 )
 
 pytestmark = pytest.mark.anyio
@@ -211,9 +215,76 @@ async def test_publication_find_by_id(replay_fixture: ReplayFixture) -> None:
         "No",
         "Report",
     )
+    assert wasde.status is Status.ACTIVE
+    assert wasde.subscribable is Subscribable.NO
+    assert wasde.resource_type is ResourceType.REPORT
+    dumped = wasde.model_dump(mode="json")
+    assert (dumped["status"], dumped["subscribable"], dumped["resource_type"]) == (
+        "Active",
+        "No",
+        "Report",
+    )
     assert wasde.upcoming_releases == []
     assert "&nbsp;" in wasde.description, "kept as printed"
     assert sent_urls(route) == [f"{API}/publication/findById/1659"]
+
+
+async def test_publication_upcoming_releases(replay_fixture: ReplayFixture) -> None:
+    """Upcoming release times print an Eastern offset, which the model keeps."""
+    route = replay_fixture("publication_find_by_id", "1863")
+    [hatchery] = (await api.publication_find_by_id(1863)).results
+    assert hatchery.title == "Broiler Hatchery"
+    raw = recorded_body("publication_find_by_id", "1863")
+    printed = raw["results"][0]["upcoming_releases"]  # type: ignore[index]
+    assert printed[:2] == ["2026-10-28T15:00:00-0400", "2026-11-04T15:00:00-0500"]
+    assert len(hatchery.upcoming_releases) == len(printed) == 10
+    edt, est = timezone(timedelta(hours=-4)), timezone(timedelta(hours=-5))
+    assert hatchery.upcoming_releases[:2] == [
+        datetime(2026, 10, 28, 15, 0, tzinfo=edt),
+        datetime(2026, 11, 4, 15, 0, tzinfo=est),
+    ]
+    assert [t.utcoffset() for t in hatchery.upcoming_releases[:2]] == [
+        timedelta(hours=-4),
+        timedelta(hours=-5),
+    ]
+    assert sent_urls(route) == [f"{API}/publication/findById/1863"]
+
+
+def yaml_enums(schema: str) -> dict[str, list[str]]:
+    """The ``enum`` lists of one schema's properties in the snapshot, as text."""
+    text = SNAPSHOT.read_text(encoding="utf-8").replace("\r\n", "\n")
+    lines = text.split("\n")
+    start = lines.index(f"    {schema}:")
+    found: dict[str, list[str]] = {}
+    prop = ""
+    for line in lines[start + 1 :]:
+        if re.fullmatch(r"    \S.*", line):
+            break
+        if match := re.fullmatch(r"        (\w+):", line):
+            prop = match.group(1)
+        elif match := re.fullmatch(r"            - (.+)", line):
+            if prop in found:
+                found[prop].append(match.group(1))
+        elif line == "          enum:":
+            found[prop] = []
+    return found
+
+
+def test_publication_enumerations_follow_the_document() -> None:
+    """Three of the document's four enumerations are ``StrEnum`` with exactly its values;
+    ``frequency`` stays ``str``, since the wire printed a value it does not list."""
+    enums = yaml_enums("Publication")
+    assert sorted(enums) == ["frequency", "resource_type", "status", "subscribable"]
+    typed: dict[str, type[StrEnum]] = {
+        "status": Status,
+        "subscribable": Subscribable,
+        "resource_type": ResourceType,
+    }
+    for field, enum in typed.items():
+        assert [member.value for member in enum] == enums[field]
+        assert Publication.model_fields[field].annotation is enum
+    assert Publication.model_fields["frequency"].annotation is str
+    assert "" not in enums["frequency"]
 
 
 async def test_publication_find_by_id_unknown(replay_fixture: ReplayFixture) -> None:

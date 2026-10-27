@@ -27,11 +27,16 @@ model does not name is dropped when parsed, never refused. That is how
 ``PublicationResults`` and ``ReleaseResults`` take the list wrapper's ``filters``,
 ``sorters`` and ``system`` keys, which the document does not name.
 
-The four Publication enumerations of the document (``frequency``, ``status``,
-``subscribable``, ``resource_type``) stay ``str``: the recorded publications use a few of
-their values only, and a value outside the document's list, which the wire has not been
-checked against, would fail a whole page.
+The document declares four enumerations on ``Publication``. A walk of every page of
+``esmis_api_publication_findAll`` on 2026-10-27 (pages 0 to 100, 2522 publications)
+settled them by evidence: ``status``, ``subscribable`` and ``resource_type`` used only
+the document's values and are ``StrEnum`` (``Status``, ``Subscribable``,
+``ResourceType``), members named by core's ``enum_member_name`` rule, values as upstream
+prints them; ``frequency`` stays ``str``, since publication 1172 printed it as ``""``,
+which the document does not list.
 """
+
+from enum import StrEnum
 
 from pydantic import AwareDatetime
 from xippios.core import UpstreamModel
@@ -43,7 +48,46 @@ __all__ = [
     "PublicationResults",
     "Release",
     "ReleaseResults",
+    "ResourceType",
+    "Status",
+    "Subscribable",
 ]
+
+
+class Status(StrEnum):
+    """A publication's ``status``: ``Active`` or ``Inactive``.
+
+    The document's enumeration of ``Publication.status``. The walk of 2026-10-27 counted
+    2033 ``Active`` and 489 ``Inactive`` of 2522 publications.
+    """
+
+    ACTIVE = "Active"
+    INACTIVE = "Inactive"
+
+
+class Subscribable(StrEnum):
+    """Whether a publication is ``subscribable``: the text ``Yes`` or ``No``.
+
+    The document's enumeration of ``Publication.subscribable``, unquoted ``Yes`` and
+    ``No`` there, which a YAML 1.1 reader takes for booleans; the wire sends the strings.
+    The walk of 2026-10-27 counted 2068 ``Yes`` and 454 ``No`` of 2522 publications.
+    """
+
+    YES = "Yes"
+    NO = "No"
+
+
+class ResourceType(StrEnum):
+    """A publication's ``resource_type``: ``Report``, ``Dataset`` or ``Statistical bulletin``.
+
+    The document's enumeration of ``Publication.resource_type``. The walk of 2026-10-27
+    counted 2404 ``Report``, 78 ``Statistical bulletin`` and 40 ``Dataset`` of 2522
+    publications.
+    """
+
+    REPORT = "Report"
+    DATASET = "Dataset"
+    STATISTICAL_BULLETIN = "Statistical bulletin"
 
 
 class Agency(UpstreamModel):
@@ -116,8 +160,11 @@ class Publication(UpstreamModel):
     ``publication_agency_export_1``, a field the document does not name, instead. As
     recorded, every publication of ``esmis_api_publication_findAll`` carries
     ``agency_acronym`` and no ``publication_agency_export_1``, and every one of the
-    other four publication operations the reverse. Both are kept as upstream prints
-    them, neither merged into the other.
+    other four publication operations the reverse; the walk of every
+    ``esmis_api_publication_findAll`` page on 2026-10-27 found ``agency_acronym`` on all
+    2522 and ``publication_agency_export_1`` on none. Both are kept as upstream prints
+    them, neither merged into the other. Every other field was on all 2522 publications
+    of the walk, and is required.
 
     Attributes:
         id: ``id``, a string of digits, e.g. ``"1659"``; the ``publicationId`` of
@@ -127,16 +174,17 @@ class Publication(UpstreamModel):
         title: ``title``, e.g. ``"World Agricultural Supply and Demand Estimates"``.
         contact_email: ``contact_email``, e.g. ``"msewadeh@oce.usda.gov"``.
         keywords: ``keywords``, e.g. ``["dairy", "grains", "soybeans"]``.
-        frequency: ``frequency``; the document lists ``Daily``, ``Bi-weekly``,
+        frequency: ``frequency``, text; the document lists ``Daily``, ``Bi-weekly``,
             ``Weekly``, ``Monthly``, ``Annually``, ``Seasonal``, ``Other`` and ``Not
-            specified``; recorded: ``"Daily"``, ``"Weekly"``, ``"Monthly"``,
-            ``"Annually"``.
-        status: ``status``; the document lists ``Active`` and ``Inactive``; recorded:
-            ``"Active"``.
-        subscribable: ``subscribable``, the text ``"Yes"`` or ``"No"`` as the document
-            lists them, not a boolean.
-        resource_type: ``resource_type``; the document lists ``Report``, ``Dataset`` and
-            ``Statistical bulletin``; recorded: ``"Report"``, ``"Dataset"``.
+            specified``. The walk of 2026-10-27 counted 842 ``Weekly``, 693 ``Daily``,
+            329 ``Not specified``, 212 ``Other``, 180 ``Annually``, 178 ``Monthly``, 84
+            ``Seasonal``, 3 ``Bi-weekly`` and one ``""`` (publication 1172, page 33),
+            which the document does not list, so it stays ``str``.
+        status: ``status``, a ``Status``, e.g. ``Status.ACTIVE`` (``"Active"``).
+        subscribable: ``subscribable``, a ``Subscribable``, the text ``"Yes"`` or
+            ``"No"``, not a boolean.
+        resource_type: ``resource_type``, a ``ResourceType``, e.g.
+            ``ResourceType.REPORT`` (``"Report"``).
         subject: ``subject``, e.g. ``["Grains and Oilseeds"]``.
         description: ``description``, text as upstream prints it, HTML entities such as
             ``&nbsp;`` included.
@@ -145,9 +193,13 @@ class Publication(UpstreamModel):
             ``publicationIdentifier`` of ``esmis_api_publication_findByIdentifier`` and
             ``esmis_api_release_findByIdentifier``. One carrying ``/`` cannot be looked
             up (``tests/fixtures/publication_find_by_identifier/with_slash.json``).
-        upcoming_releases: ``upcoming_releases``; ``[]`` in every recorded publication.
-            The document types the items as ``date-time`` strings; no answer shows one,
-            so they are kept as text (``list[str]``), an assumption until one is seen.
+        upcoming_releases: ``upcoming_releases``, the document's ``date-time``
+            strings, parsed into aware datetimes with the offset as printed, e.g.
+            ``2026-10-28T15:00:00-0400`` and ``2026-11-04T15:00:00-0500`` for Broiler
+            Hatchery (``tests/fixtures/publication_find_by_id/1863.json``), an Eastern
+            offset where ``Release.release_datetime`` prints ``+0000``. ``[]`` on most:
+            the walk of 2026-10-27 found items on 24 of 2522 publications, 67 in all,
+            every one ``YYYY-MM-DDTHH:MM:SS-HHMM``.
         agency_acronym: ``agency_acronym``, e.g. ``["AMS", "AMS-DA"]``; ``None`` where
             upstream leaves it out.
         publication_agency_export_1: ``publication_agency_export_1``, e.g.
@@ -160,13 +212,13 @@ class Publication(UpstreamModel):
     contact_email: str
     keywords: list[str]
     frequency: str
-    status: str
-    subscribable: str
-    resource_type: str
+    status: Status
+    subscribable: Subscribable
+    resource_type: ResourceType
     subject: list[str]
     description: str
     identifier: list[str]
-    upcoming_releases: list[str]
+    upcoming_releases: list[AwareDatetime]
     agency_acronym: list[str] | None = None
     publication_agency_export_1: list[str] | None = None
 
