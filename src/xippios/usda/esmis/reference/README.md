@@ -47,4 +47,5 @@ Rules:
 
 | File | Origin | Fetched |
 | --- | --- | --- |
-| (none yet) | | |
+| `agency.json` | `esmis_api_agency_findAll`, `GET /api/v1/agency/findAll`, one request (9 records) | 2026-10-27T17:24:45Z |
+| `publication.json` | `esmis_api_publication_findAll`, `GET /api/v1/publication/findAll`, every page, 0 to 100 (2522 records) | 2026-10-27T17:24:48Z |
