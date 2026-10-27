@@ -1,12 +1,15 @@
 """Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
 
-One live smoke test per task, eight in all, next to the reachability check and one test
-of the order the release tasks rely on; keyless, twelve requests in all, paced by the
-client at 30 a minute. Each task test checks the shape of what ESMIS answers today,
-never a value that changes with the next release. The download fetches the current
-WASDE ``.txt`` alone (about 120 KB; the nightly budget is one small ``.txt``) into a
-temporary directory, and checks the file's size, never what it says (ADR-0020). Requests:
-the reachability check 1, ``list_agencies`` 1, ``search_publications`` 1 (one short
+One live smoke test per task, nine in all, next to the reachability check, one test of
+the order the release tasks rely on and one of the packaged agency table; keyless,
+fourteen requests in all, paced by the client at 30 a minute. Each task test checks the
+shape of what ESMIS answers today, never a value that changes with the next release.
+``list_publications`` sends nothing: its test compares the packaged table's size with
+upstream's count today. The download fetches the current WASDE ``.txt`` alone (about
+120 KB; the nightly budget is one small ``.txt``) into a temporary directory, and checks
+the file's size, never what it says (ADR-0020). Requests: the reachability check 1,
+``list_agencies`` 1, the packaged agency table 1, ``list_publications`` 1 (page 0 of
+``esmis_api_publication_findAll``, for its count), ``search_publications`` 1 (one short
 page), ``get_publication`` 1, ``list_releases`` 1 (page 0), ``get_release`` 1,
 ``get_latest_release`` 1, ``list_release_files`` 1, the download 3 (the latest WASDE
 release, the release, the file) and the order check 1.
@@ -17,9 +20,11 @@ from pathlib import Path
 
 import httpx
 import pytest
+from xippios.core import PackagedList
 
 from xippios.usda.esmis import api, tasks
-from xippios.usda.esmis._client import BASE_URL, config
+from xippios.usda.esmis._client import BASE_URL, SOURCE, config
+from xippios.usda.esmis.models import Agency, Pager
 
 pytestmark = [pytest.mark.live, pytest.mark.anyio]
 
@@ -50,6 +55,36 @@ async def test_list_agencies_live() -> None:
     assert all(agency.acronym and agency.id.isdigit() for agency in result.data)
     assert result.meta.endpoint == "esmis_api_agency_findAll"
     assert result.meta.total is None
+
+
+async def test_the_packaged_agency_table_matches_upstream_live() -> None:
+    """The packaged agencies are upstream's today: as many, the same acronyms in order.
+
+    ``list_publications`` refuses an ``agency_acronym`` the packaged table lacks, so an
+    agency upstream added since would be refused until the next refresh; this says when.
+    """
+    packaged = PackagedList.load(tasks.PACKAGE, "agency").parse(Agency, source=SOURCE)
+    live = await api.agency_find_all()
+    assert len(packaged) == len(live)
+    assert [agency.acronym for agency in packaged] == [agency.acronym for agency in live]
+
+
+PUBLICATION_TOLERANCE = 25
+"""How far upstream's count of publications may drift from the packaged table's: a page.
+
+The table is a snapshot, refreshed in a PR of its own before each release. ESMIS lists
+retired publications as ``Inactive`` (489 of 2522 on 2026-10-27), so the count moves
+mostly by the series it adds; a few new series between releases should not fail the
+nightly run, while a page of them means agents miss enough that the refresh is due now."""
+
+
+async def test_list_publications_live() -> None:
+    """The packaged table's size against upstream's ``total_results`` today, within a page."""
+    packaged = await tasks.list_publications_async()
+    answer = await api.publication_find_all(0)
+    assert isinstance(answer.pager, Pager)
+    assert abs(answer.pager.total_results - len(packaged.data)) <= PUBLICATION_TOLERANCE
+    assert packaged.meta.endpoint == "esmis_api_publication_findAll"
 
 
 async def test_search_publications_live() -> None:
