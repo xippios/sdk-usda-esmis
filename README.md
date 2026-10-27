@@ -1,7 +1,8 @@
 # xippios-usda-esmis
 
 Typed Python client, MCP server and FastAPI routes for
-[USDA ESMIS](https://esmis.nal.usda.gov), part of the
+[USDA ESMIS](https://esmis.nal.usda.gov), the Economics, Statistics, and Market
+Information System of USDA's National Agricultural Library, part of the
 [xippios SDK family](https://github.com/xippios). Names and semantics follow the
 upstream documentation; every response carries release metadata (source, endpoint,
 retrieved_at, published_at, vintage).
@@ -54,6 +55,28 @@ exactly tasks.__all__ and tasks_write.__all__. -->
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
 | (none yet) | | | |
+
+## Where the live API deviates from its OpenAPI document (probed 2026-10-27)
+
+The OpenAPI document in `docs/upstream/openapi/esmis_public_api.yaml` is the reference
+for names and parameters; the live API answers differently in these points:
+
+- every `id` is a JSON string, not an integer;
+- `Publication.agency`, `.identifier` and `.agency_acronym` are arrays, not strings;
+- `agency_acronym` is absent on some publications, which carry
+  `publication_agency_export_1` instead;
+- the list wrapper has `filters`, `sorters` and `system` (`{"page_key": "page"}`)
+  beside `pager` and `results`;
+- `/publication/search` without `query` answers 200 with `"pager": []`;
+- `findById` of an unknown id answers 404 `{"message": ""}`, `findByIdentifier` of an
+  unknown identifier answers 200 with empty results;
+- `page` is 0-based with 25 items per page fixed, a page past the last answers empty
+  results with `current_page` clamped;
+- lists come newest first (by id, descending), undocumented;
+- `release_datetime` is `YYYY-MM-DDTHH:MM:SS+0000` (a zone, no colon);
+- `Release.files` are absolute URLs;
+- `Publication.upcoming_releases` was `[]` on every sampled publication, and no
+  release-calendar endpoint exists.
 
 ## Upstream terms and attribution
 

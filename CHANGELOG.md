@@ -16,3 +16,5 @@ All notable changes to this project are documented here. The format follows
   capture script `scripts/refresh_upstream.py`: the ESMIS OpenAPI document verbatim,
   the WASDE publication page and its newest release's page as Markdown, and an excerpt
   of the release calendar, with `FETCHED.md` recording every fetch.
+- README and CLAUDE.md name ESMIS in full; the README lists where the live API deviates
+  from its OpenAPI document, as probed on 2026-10-27.
