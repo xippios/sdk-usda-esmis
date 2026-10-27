@@ -29,3 +29,6 @@ All notable changes to this project are documented here. The format follows
   them; the pin rule of the family roadmap §3. The pin is removed, and `core_version`
   raised to the release that carries them, in a PR of its own before this package's
   first release.
+- `scripts/refresh_reference.py` calls core's `render_enums`, since the pinned core
+  removed `render_str_enums` and `render_int_enums`: a hand-port ahead of template
+  v0.3.0, which renders it. `enums.py` is not regenerated here.
