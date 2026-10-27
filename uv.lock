@@ -1405,7 +1405,7 @@ wheels = [
 [[package]]
 name = "xippios-core"
 version = "0.2.1"
-source = { git = "https://github.com/xippios/sdk-core.git?rev=787b60cab89918a3ef7946065ba02e6bc5f20f9e#787b60cab89918a3ef7946065ba02e6bc5f20f9e" }
+source = { git = "https://github.com/xippios/sdk-core.git?rev=cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff#cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
@@ -1458,10 +1458,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "xippios-core", git = "https://github.com/xippios/sdk-core.git?rev=787b60cab89918a3ef7946065ba02e6bc5f20f9e" },
-    { name = "xippios-core", extras = ["http"], marker = "extra == 'http'", git = "https://github.com/xippios/sdk-core.git?rev=787b60cab89918a3ef7946065ba02e6bc5f20f9e" },
-    { name = "xippios-core", extras = ["mcp"], marker = "extra == 'mcp'", git = "https://github.com/xippios/sdk-core.git?rev=787b60cab89918a3ef7946065ba02e6bc5f20f9e" },
-    { name = "xippios-core", extras = ["testing"], marker = "extra == 'testing'", git = "https://github.com/xippios/sdk-core.git?rev=787b60cab89918a3ef7946065ba02e6bc5f20f9e" },
+    { name = "xippios-core", git = "https://github.com/xippios/sdk-core.git?rev=cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff" },
+    { name = "xippios-core", extras = ["http"], marker = "extra == 'http'", git = "https://github.com/xippios/sdk-core.git?rev=cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff" },
+    { name = "xippios-core", extras = ["mcp"], marker = "extra == 'mcp'", git = "https://github.com/xippios/sdk-core.git?rev=cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff" },
+    { name = "xippios-core", extras = ["testing"], marker = "extra == 'testing'", git = "https://github.com/xippios/sdk-core.git?rev=cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff" },
 ]
 provides-extras = ["mcp", "http", "testing"]
 

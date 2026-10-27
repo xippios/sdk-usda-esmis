@@ -55,7 +55,7 @@ dev = [
 #   uvx copier update --defaults --vcs-ref=:current: -d core_git_ref= -d core_version=X.Y.Z
 # The removal is a PR of its own, merged before the release PR; /release-prep and
 # publish.yml refuse a pinned release.
-xippios-core = { git = "https://github.com/xippios/sdk-core.git", rev = "787b60cab89918a3ef7946065ba02e6bc5f20f9e" }  # pragma: allowlist secret (a git ref, not a key)
+xippios-core = { git = "https://github.com/xippios/sdk-core.git", rev = "cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff" }  # pragma: allowlist secret (a git ref, not a key)
 
 [build-system]
 requires = ["hatchling>=1.27"]
