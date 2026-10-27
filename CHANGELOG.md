@@ -21,14 +21,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- Development pin: `xippios-core` comes from sdk-core commit `cb8ecdf` on `main`
-  (`core_git_ref`, `[tool.uv.sources]`; `core_version` stays 0.2.1), which carries the
-  api.data.gov gateway module (C14, unused by this keyless source),
+- `xippios-core` 0.3.0 from PyPI (`core_version` 0.3.0, `~=0.3.0`; template v0.2.2),
+  which brings the api.data.gov gateway module (C14, unused by this keyless source),
   `AsyncClient.download` for bulk files (C15, ADR-0019) and ADR-0022's
-  `ResultMeta.published_at_naive`, which the release tasks need before core releases
-  them; the pin rule of the family roadmap §3. The pin is removed, and `core_version`
-  raised to the release that carries them, in a PR of its own before this package's
-  first release.
-- `scripts/refresh_reference.py` calls core's `render_enums`, since the pinned core
-  removed `render_str_enums` and `render_int_enums`: a hand-port ahead of template
-  v0.3.0, which renders it. `enums.py` is not regenerated here.
+  `ResultMeta.published_at_naive`, which the release tasks need. Until core released
+  0.3.0 on 2026-10-27, this branch carried a git pin to sdk-core `main` (`787b60c`,
+  then `cb8ecdf`) by the pin rule of the family roadmap §3; the pin is gone. The
+  adoption of template v0.3.0 follows as a PR of its own.
+- `scripts/refresh_reference.py` calls core's `render_enums`, since core 0.3.0 removed
+  `render_str_enums` and `render_int_enums`: a hand-port ahead of template v0.3.0, which
+  renders it. `enums.py` is not regenerated here.

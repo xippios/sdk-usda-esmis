@@ -4,8 +4,8 @@ Every list in ``LISTS`` or ``ID_LISTS`` is fetched through the layer-1 wrappers 
 ``api/``, never through a task that might answer from the package, and written to
 ``reference/<name>.json`` with the fetch date, an id list as upstream's records under
 upstream's field names; then ``enums.py`` is regenerated as core renders it, ASCII-only
-(ADR-0008). The pinned core's rule wants ``ruff format`` and ``ruff check --fix`` run on
-the render (ADR-0008, amendment 2026-10-27); this script does not run them yet: that step
+(ADR-0008). Core 0.3.0's rule wants ``ruff format`` and ``ruff check --fix`` run on the
+render (ADR-0008, amendment 2026-10-27); this script does not run them yet: that step
 comes with template v0.3.0's render of it, or with the reference PR that fills the lists,
 and is moot while no list is packaged. A value list in ``LISTS`` becomes one ``StrEnum``
 and a list of integer ids and names in ``ID_LISTS``, through ``id_name_pairs``, one

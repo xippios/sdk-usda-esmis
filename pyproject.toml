@@ -18,13 +18,13 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "xippios-core~=0.2.1",
+  "xippios-core~=0.3.0",
 ]
 
 [project.optional-dependencies]
-mcp = ["xippios-core[mcp]~=0.2.1"]
-http = ["xippios-core[http]~=0.2.1"]
-testing = ["xippios-core[testing]~=0.2.1"]
+mcp = ["xippios-core[mcp]~=0.3.0"]
+http = ["xippios-core[http]~=0.3.0"]
+testing = ["xippios-core[testing]~=0.3.0"]
 
 [project.scripts]
 xippios-usda-esmis-mcp = "xippios.usda.esmis.mcp:run"
@@ -45,17 +45,6 @@ dev = [
   "anyio>=4",
   "detect-secrets>=1.5",
 ]
-
-[tool.uv.sources]
-# Development only: xippios-core from git, for a core change that is not released yet.
-# While the pin is set, uv takes core from it and ignores the version bound above.
-# Before a release, remove the pin and raise core_version to the release that carries
-# the pinned change: X.Y.Z with Z the patch that shipped it, or X.Y.0 when the minor
-# itself did; still one minor. Then uv lock:
-#   uvx copier update --defaults --vcs-ref=:current: -d core_git_ref= -d core_version=X.Y.Z
-# The removal is a PR of its own, merged before the release PR; /release-prep and
-# publish.yml refuse a pinned release.
-xippios-core = { git = "https://github.com/xippios/sdk-core.git", rev = "cb8ecdf379c04522e5f1dcd91ea5e8bdfa1fb3ff" }  # pragma: allowlist secret (a git ref, not a key)
 
 [build-system]
 requires = ["hatchling>=1.27"]
