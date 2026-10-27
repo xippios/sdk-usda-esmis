@@ -76,12 +76,31 @@ for names and parameters; the live API answers differently in these points:
 - `release_datetime` is `YYYY-MM-DDTHH:MM:SS+0000` (a zone, no colon);
 - `Release.files` are absolute URLs;
 - `Publication.upcoming_releases` was `[]` on every sampled publication, and no
-  release-calendar endpoint exists.
+  release-calendar endpoint exists;
+- the zone label of release times: the API prints `release_datetime` as
+  `2026-10-09T12:00:00+0000` and the release page prints
+  `datetime="2026-10-09T12:00:00Z"`, while the release calendar's settings say
+  `timeZone: "America/New_York"`, with WASDE's calendar events at noon Eastern
+  (`2025-09-12T12:00:00-04:00`, `2025-12-09T12:00:00-05:00`), and that release's own
+  file answers `HEAD /sites/default/release-files/796099/wasde1026.txt` with
+  `Last-Modified: Fri, 09 Oct 2026 16:01:00 GMT`, 12:01 Eastern. The `+0000`/`Z` label
+  is contradicted by upstream's own calendar and file timestamps, which fit a noon
+  Eastern wall-clock time; how `published_at` treats it is decided before the tasks PR
+  (ADR-0022);
+- the release calendar page (`docs/upstream/pages/release-calendar.md`) held 3776
+  events, drawn from a `publication_upcoming_releases` field (each event's
+  `startField`), while the API's `Publication.upcoming_releases` answered `[]` for
+  every sampled publication; every calendar event is classed `fc-event-past`, future
+  ones included, and WASDE's events stop at 2025-12-09.
 
 ## Upstream terms and attribution
 
-Data comes from USDA ESMIS (https://esmis.nal.usda.gov) under its own terms of use;
-this package adds no rights to it. Documentation snapshot: `docs/upstream/`.
+Data comes from USDA ESMIS (https://esmis.nal.usda.gov); this package adds no rights to
+it. The pages the documentation snapshot reads state no terms of use and no copyright
+line (`docs/upstream/FETCHED.md`, Attribution). USDA's Policies and Links page
+(https://www.usda.gov/policies-and-links), to which the site's footer links, answered
+403 to the capture script, so what it states stays unverified. Documentation snapshot:
+`docs/upstream/`.
 
 ## Licence
 
