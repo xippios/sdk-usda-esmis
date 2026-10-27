@@ -111,9 +111,11 @@ wrapper from memory of the API.
   docstring is the recipe for this package until the template adoption. The refresh
   budget: 102 keyless requests (the agencies, then
   `/publication/findAll` pages 0 to 100, bounded by `total_pages`) at 30 a minute, about
-  four minutes, run once, in a refresh PR of its own before each release (Workflow
-  rules); the script refuses to write a walk whose pages disagree. The nightly live
-  tests compare the agency table with upstream and the publication count within a page.
+  four minutes, run once before each release and committed in a refresh PR of its own
+  when a table changed, none when both are unchanged (Workflow rules; decided by
+  Johannes on 2026-10-27); the script refuses to write a walk whose pages disagree.
+  The nightly live tests compare the agency table with upstream and the publication
+  count within a page.
 - **A catalog, never a parser** (ADR-0020). This package lists publications, releases
   and their files, and downloads a file; it never parses one. Parser packages such as
   `xippios-usda-wasde` depend on its tasks and models, never on `api/` or `_client`
