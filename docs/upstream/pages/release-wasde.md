@@ -2,11 +2,7 @@
 
 Converted from
 https://esmis.nal.usda.gov/publication/world-agricultural-supply-and-demand-estimates/2026-10-09
-by `scripts/refresh_upstream.py`; `../FETCHED.md` records the fetch. Kept: the page's
-main content; dropped: breadcrumbs, the site's header, navigation and footer, and
-screen-reader-only text. Links are absolute URLs; a date is its text with its `datetime`
-attribute in parentheses. This is the view page of the publication's newest release, the
-first row of its release list, so this file changes with every release.
+by `scripts/refresh_upstream.py`; see `../FETCHED.md`.
 
 - **Release date**: Oct 09 2026 (`2026-10-09T12:00:00Z`)
 

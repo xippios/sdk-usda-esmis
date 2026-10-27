@@ -1,17 +1,15 @@
 # Release Calendar
 
-An excerpt of https://esmis.nal.usda.gov/release-calendar, written by
-`scripts/refresh_upstream.py`; `../FETCHED.md` records the fetch, with the full page's
-size and sha256. The page changes daily, so this file keeps its structure only. Its main
-content is the heading above and an empty calendar container, which the browser fills
-from the events in the page's `drupal-settings-json`; the page has no HTML table.
-Breadcrumbs, the site's header, navigation and footer are dropped.
+An excerpt of https://esmis.nal.usda.gov/release-calendar by
+`scripts/refresh_upstream.py`; see `../FETCHED.md`. The page's main content is the
+heading above and an empty calendar container, which the browser fills from the events
+in the page's `drupal-settings-json`.
 
 ## Calendar settings
 
 The page's `drupal-settings-json` holds one calendar under `fullcalendar`, keyed by a
-view DOM id (`js-view-dom-id-…`, left out here). Its settings as fetched,
-`options.eventSources` left out:
+view DOM id (left out here). Its settings, `options.eventSources` left out,
+re-serialised with `json.dumps`, values as fetched:
 
 ```json
 {
@@ -66,7 +64,7 @@ view DOM id (`js-view-dom-id-…`, left out here). Its settings as fetched,
 `id`s, their `start` from `2018-07-30T15:00:00-04:00` to `2026-12-31T15:00:00-05:00`.
 Every event has the same fields, in this order: `id`, `eid`, `startField`, `endField`,
 `allDay`, `start`, `end`, `editable`, `type`, `className`, `title`, `url`. The first 10
-events as fetched, one JSON object per line:
+events, one JSON object per line, re-serialised with `json.dumps`, values as fetched:
 
 ```json
 {"id": "1861", "eid": 0, "startField": "publication_upcoming_releases", "endField": "publication_upcoming_releases", "allDay": false, "start": "2024-06-20T15:00:00-04:00", "end": "2024-06-20T17:00:00-04:00", "editable": false, "type": "datetime", "className": " fc-event-past", "title": "Announcement of Advanced Prices and  Pricing Factors", "url": "/publication/announcement-advanced-prices-and-pricing-factors"}
@@ -81,4 +79,4 @@ events as fetched, one JSON object per line:
 {"id": "1861", "eid": 0, "startField": "publication_upcoming_releases", "endField": "publication_upcoming_releases", "allDay": false, "start": "2025-03-19T15:00:00-04:00", "end": "2025-03-19T17:00:00-04:00", "editable": false, "type": "datetime", "className": " fc-event-past", "title": "Announcement of Advanced Prices and  Pricing Factors", "url": "/publication/announcement-advanced-prices-and-pricing-factors"}
 ```
 
-… 3766 more rows not kept (the page changes daily)
+… 3766 more events not kept

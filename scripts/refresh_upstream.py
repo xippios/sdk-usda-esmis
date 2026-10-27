@@ -8,45 +8,27 @@
 """Refresh the upstream documentation snapshot in ``docs/upstream/`` (``/refresh-upstream``).
 
 ESMIS, the Economics, Statistics, and Market Information System of USDA's National
-Agricultural Library (https://esmis.nal.usda.gov), documents its API on a Drupal page,
-``/api-documentation``, whose main content is an empty Swagger UI container: the Swagger
-UI renders the OpenAPI document that the page's ``drupal-settings-json`` names at
-``swaggerUIFormatter.swagger_file-0.swaggerFile``. The script reads that URL from the
-page, stops if the key is gone or names another host, and writes:
+Agricultural Library (https://esmis.nal.usda.gov), documents its API in an OpenAPI
+document that its ``/api-documentation`` page names. The script writes:
 
-- ``openapi/esmis_public_api.yaml``: the OpenAPI document verbatim, byte for byte;
-- ``pages/publication-wasde.md``: the WASDE publication page converted to Markdown;
-- ``pages/release-wasde.md``: the view page of that publication's newest release, the
-  first row of the publication page's release list, converted the same way;
-- ``pages/release-calendar.md``: an excerpt of the release calendar, a page that changes
-  daily and draws its calendar in the browser from the events in its
-  ``drupal-settings-json``: its heading, the calendar's settings, the events' field
-  names and the first ``CALENDAR_EVENTS`` events as fetched, the rest counted;
+- ``openapi/esmis_public_api.yaml``: the OpenAPI document, byte for byte;
+- ``pages/publication-wasde.md`` and ``pages/release-wasde.md``: the WASDE publication
+  page and its newest release's view page, converted to Markdown;
+- ``pages/release-calendar.md``: an excerpt of the release calendar;
 - ``FETCHED.md``: regenerated entirely, one row per file and per page recorded without
-  a file (the API documentation page; ESMIS's former API address at Cornell's Mann
-  Library, status only; the two policy pages the site's footer links to).
+  a file.
 
-Pages are converted with the standard library's ``html.parser``: the page's ``<main>``
-content, breadcrumbs dropped, as are the header, navigation and footer outside it and the
-screen-reader-only text inside links; links become absolute URLs, a ``<time>`` element
-its text with its ``datetime`` in parentheses. A page whose structure the converter does
-not know stops the run, so nothing is dropped unnoticed.
-
-Everything is fetched before anything is written, one request at a time with a pause,
-each URL retried at most once. Files under ``openapi/`` and ``pages/`` that the run does
-not produce are removed; ``FETCHED.md`` is rewritten; nothing else under
-``docs/upstream/`` is touched. Against the same upstream, two runs write byte-identical
-files, but for the calendar excerpt, and ``FETCHED.md`` differs in its ``Fetched``
-column, the UTC time the run started, and in the validators of any page Drupal rendered
-anew in between (``FETCHED.md`` says how). The script stops if a page it reads starts to
-state a copyright, a licence or terms of use, which ``FETCHED.md``'s Attribution says
-none does. The API needs no key, and none is sent or read. Run from the repository root::
+How each is captured is stated once, in the ``FETCHED.md`` this script writes
+(``render_fetched``). Everything is fetched before anything is written. A page whose
+structure the converter does not know, or one that starts to state a copyright, a
+licence or terms of use, stops the run. Files under ``openapi/`` and ``pages/`` that the
+run does not produce are removed; nothing else under ``docs/upstream/`` is touched. No
+key is needed or read. Run from the repository root::
 
     uv run scripts/refresh_upstream.py
 """
 
 import argparse
-import calendar
 import hashlib
 import http.client
 import json
@@ -79,6 +61,9 @@ CORNELL_URL = "https://usda.library.cornell.edu/api"
 CORNELL_TARGET = f"{SITE}/api"
 POLICIES_URL = "https://www.usda.gov/policies-and-links"
 QUALITY_URL = "https://www.ars.usda.gov/docs/quality-of-information/"
+"""The two footer links that could carry terms of use; the script reads both."""
+FOOTER_LABEL = "Government Links"
+"""The ``aria-label`` of the footer's list of links."""
 SWAGGER_KEY = ("swaggerUIFormatter", "swagger_file-0", "swaggerFile")
 """Where the documentation page's ``drupal-settings-json`` names the OpenAPI document."""
 
@@ -98,18 +83,21 @@ RETRY_PAUSE = 10.0
 """Seconds before the one retry after a network error or a 5xx."""
 
 _STATEMENT = re.compile(
-    r"\N{COPYRIGHT SIGN}|&copy;|copyright|public domain|licen[cs]e|terms of (?:use|service)",
+    r"\N{COPYRIGHT SIGN}|copyright|public domain|licen[cs]e|terms of (?:use|service)",
     re.IGNORECASE,
 )
 _SETTINGS = "drupal-settings-json"
+_RELEASES_BLOCK = "block-views-blockpublication-releases-indexed-all-releases-block"
+_LATEST_BLOCK = "block-views-blockpublication-releases-latest-release-block"
 _RELEASE_PATH = re.compile(r"/\d{4}-\d{2}-\d{2}(?:-\d+)?")
-_MONTH = re.compile(r"(\d{4})-(\d{2})")
+_MONTH = re.compile(r"\d{4}-\d{2}")
+_PAGE = re.compile(r"\?page=(\d+)")
 _VOID = frozenset(
     {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "wbr"}
 )
 _NO_TEXT = frozenset({"script", "style", "svg", "template", "noscript"})
-_BLOCKS = frozenset({"p", "div", "section", "ul", "ol", "table", "h2", "h3", "h4", "h5", "h6"})
-_INLINE_MARKS = {"strong": "**", "b": "**", "em": "*", "i": "*", "code": "`"}
+_INLINE = frozenset({"span", "div", "ul", "li"})
+"""Elements whose content is kept inline as it stands; any other one stops the run."""
 
 
 @dataclass
@@ -179,24 +167,21 @@ def _get(url: str, expect: int) -> Response:
     redirects = _RecordRedirects()
     opener = urllib.request.build_opener(redirects)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    _TALLY.requests += 1
     try:
         with opener.open(request, timeout=TIMEOUT) as response:
             body: bytes = response.read()
             status: int = response.status
             headers = response.headers
     except urllib.error.HTTPError as error:
-        _TALLY.requests += len(redirects.hops)
         if error.code >= 500:
             raise _RetryableError(f"HTTP {error.code} {error.reason}") from None
         if error.code != expect:
             raise SystemExit(f"GET {url}: HTTP {error.code} {error.reason}") from None
         body, status, headers = error.read(), error.code, error.headers
     except (http.client.HTTPException, OSError) as error:  # URLError is an OSError
-        _TALLY.requests += len(redirects.hops)
         raise _RetryableError(str(error)) from None
-    else:
-        _TALLY.requests += len(redirects.hops)
+    finally:
+        _TALLY.requests += 1 + len(redirects.hops)
     if status != expect:
         raise SystemExit(f"GET {url}: expected HTTP {expect}, got {status}")
     encoding = headers.get("Content-Encoding", "identity").strip().lower()
@@ -248,7 +233,7 @@ def _text(response: Response) -> str:
 
 
 def _no_statement(response: Response, text: str) -> None:
-    """Stop if the page states a copyright, licence or terms, which Attribution denies."""
+    """Stop if ``text`` states a copyright, licence or terms, which Attribution denies."""
     match = _STATEMENT.search(text)
     if match:
         raise SystemExit(
@@ -261,6 +246,10 @@ def _no_statement(response: Response, text: str) -> None:
 
 def _redirect_note(response: Response) -> str:
     return "".join(f"redirected ({code}) to {target}; " for code, target in response.redirects)
+
+
+def _squash(text: str) -> str:
+    return " ".join(text.split())
 
 
 # --- HTML to a tree -------------------------------------------------------------------
@@ -298,7 +287,7 @@ class Element:
         return [child for child in self.children if isinstance(child, Element)]
 
     def raw_text(self) -> str:
-        """The text below this element as parsed, script and style left out."""
+        """The text below this element as parsed, scripts and styles left out."""
         if self.tag in _NO_TEXT:
             return ""
         return "".join(
@@ -307,7 +296,7 @@ class Element:
 
     def text(self) -> str:
         """The visible text, whitespace collapsed (a no-break space counts as one)."""
-        return " ".join(self.raw_text().split())
+        return _squash(self.raw_text())
 
 
 class _TreeBuilder(HTMLParser):
@@ -351,7 +340,7 @@ def parse_html(text: str) -> Element:
 
 @dataclass(frozen=True)
 class Page:
-    """A fetched HTML page: its URL, its tree and the checks that stop a changed page."""
+    """A fetched HTML page: its URL and its tree."""
 
     url: str
     root: Element
@@ -377,10 +366,6 @@ class Page:
             ]
         return main
 
-    def title(self, main: Element) -> str:
-        """The text of the page's one ``<h1>``."""
-        return self.one(main, "h1").text()
-
     def settings(self) -> dict[str, Any]:
         """The page's ``drupal-settings-json``."""
         scripts = [
@@ -399,93 +384,70 @@ class Page:
             raise _page_changed(self.url, f"{_SETTINGS} is not an object")
         return settings
 
-    def changed(self, what: str) -> SystemExit:
-        """The error that stops the run on a page the converter does not know."""
-        return _page_changed(self.url, what)
-
 
 def html_page(response: Response) -> Page:
-    """Parse a fetched page after checking it states no copyright, licence or terms."""
-    text = _text(response)
-    _no_statement(response, text)
-    return Page(response.url, parse_html(text))
+    """Parse a fetched page; stop if its visible text states a copyright, licence or terms.
+
+    The visible text leaves scripts out, so the publication titles in a page's
+    ``drupal-settings-json`` cannot trip the check.
+    """
+    page = Page(response.url, parse_html(_text(response)))
+    _no_statement(response, page.root.text())
+    return page
 
 
 # --- the tree to Markdown -------------------------------------------------------------
-
-
-def _collapse(text: str) -> str:
-    return " ".join(text.split())
 
 
 def _cell(value: str) -> str:
     return value.replace("|", r"\|")
 
 
-def inline(node: "Element | str", base: str) -> str:
-    """Markdown for inline content, whitespace not yet collapsed.
+def inline(page: Page, node: Element) -> str:
+    """Markdown for the content of ``node``, whitespace not yet collapsed.
 
-    Links become ``[text](absolute URL)``, a ``<time>`` its text and its ``datetime`` in
-    parentheses, ``<br>`` stays ``<br>``; screen-reader-only text and scripts are left out.
-    Two links side by side get a space between them.
+    A link becomes ``[text](absolute URL)``, a ``<time>`` its text with its ``datetime``
+    in parentheses; screen-reader-only text is left out, two links side by side get a
+    space between them. An element outside ``_INLINE`` stops the run.
     """
-    if isinstance(node, str):
-        return node
-    if node.tag in _NO_TEXT or node.has_class("usa-sr-only"):
-        return ""
-    if node.tag == "br":
-        return "<br>"
     parts: list[str] = []
     previous_link = False
     for child in node.children:
-        is_link = isinstance(child, Element) and child.tag == "a"
-        if is_link and previous_link:
-            parts.append(" ")
-        parts.append(inline(child, base))
-        if isinstance(child, Element) or child.strip():
-            previous_link = is_link
-    inner = "".join(parts)
-    if node.tag == "a" and "href" in node.attrs:
-        return f"[{_collapse(inner)}]({urljoin(base, node.attrs['href'])})"
-    if node.tag == "time" and "datetime" in node.attrs:
-        return f"{inner} (`{node.attrs['datetime']}`)"
-    mark = _INLINE_MARKS.get(node.tag)
-    if mark and _collapse(inner):
-        return f"{mark}{_collapse(inner)}{mark}"
-    return inner
-
-
-def blocks(page: Page, node: Element) -> list[str]:
-    """Markdown lines for block content: paragraphs, headings, lists and tables."""
-    lines: list[str] = []
-    run: list[Element | str] = []
-
-    def flush() -> None:
-        text = _collapse("".join(inline(item, page.url) for item in run))
-        if text:
-            lines.extend([text, ""])
-        run.clear()
-
-    for child in node.children:
-        if isinstance(child, str) or child.tag not in _BLOCKS:
-            run.append(child)
+        if isinstance(child, str):
+            parts.append(child)
+            previous_link = previous_link and not child.strip()
             continue
-        flush()
-        if child.tag == "p":
-            run.append(child)
-            flush()
-        elif child.tag in {"ul", "ol"}:
-            for number, item in enumerate(child.find_all("li"), start=1):
-                bullet = f"{number}." if child.tag == "ol" else "-"
-                lines.append(f"{bullet} {_collapse(inline(item, page.url))}")
-            lines.append("")
-        elif child.tag == "table":
-            lines.extend(table(page, child))
-        elif child.tag.startswith("h"):
-            lines.extend([f"{'#' * int(child.tag[1])} {child.text()}", ""])
+        if child.tag in _NO_TEXT or child.has_class("usa-sr-only"):
+            continue
+        if child.tag == "a" and previous_link:
+            parts.append(" ")
+        inner = inline(page, child)
+        if child.tag == "a" and "href" in child.attrs:
+            parts.append(f"[{_squash(inner)}]({urljoin(page.url, child.attrs['href'])})")
+        elif child.tag == "time" and "datetime" in child.attrs:
+            parts.append(f"{inner} (`{child.attrs['datetime']}`)")
+        elif child.tag in _INLINE:
+            parts.append(inner)
         else:
-            lines.extend(blocks(page, child))
-    flush()
+            raise _page_changed(page.url, f"an inline <{child.tag}> the script does not convert")
+        previous_link = child.tag == "a"
+    return "".join(parts)
+
+
+def paragraphs(page: Page, node: Element) -> list[str]:
+    """Markdown for a field's text: its ``<p>`` elements, through any ``<div>``."""
+    lines: list[str] = []
+    for child in node.children:
+        if isinstance(child, str):
+            if child.strip():
+                raise _page_changed(page.url, "loose text beside a field's paragraphs")
+        elif child.tag == "p":
+            text = _squash(inline(page, child))
+            lines += [text, ""] if text else []
+        elif child.tag == "div":
+            lines += paragraphs(page, child)
+        else:
+            raise _page_changed(page.url, f"a <{child.tag}> in a field's text")
     return lines
 
 
@@ -493,24 +455,24 @@ def table(page: Page, node: Element) -> list[str]:
     """A pipe table for an HTML table without merged cells or nested tables."""
     cells = [*node.find_all("th"), *node.find_all("td")]
     if node.find_all("table") or any("rowspan" in c.attrs or "colspan" in c.attrs for c in cells):
-        raise page.changed(
+        raise _page_changed(
+            page.url,
             "a table with merged cells or a nested table, which this script does not convert "
-            "yet; extend it to keep such a table as HTML (conventions §3)"
+            "yet; extend it to keep such a table as HTML (conventions §3)",
         )
-    rows: list[list[str]] = []
-    for row in node.find_all("tr"):
-        rows.append(
-            [
-                _cell(_collapse(inline(cell, page.url)))
-                for cell in row.child_elements()
-                if cell.tag in {"th", "td"}
-            ]
-        )
+    rows = [
+        [
+            _cell(_squash(inline(page, cell)))
+            for cell in row.child_elements()
+            if cell.tag in {"th", "td"}
+        ]
+        for row in node.find_all("tr")
+    ]
     if not rows or not node.find_all("thead"):
-        raise page.changed("a table without a header row")
+        raise _page_changed(page.url, "a table without a header row")
     width = len(rows[0])
     if any(len(row) != width for row in rows):
-        raise page.changed("a table whose rows differ in length")
+        raise _page_changed(page.url, "a table whose rows differ in length")
     lines = ["| " + " | ".join(rows[0]) + " |", "|" + " --- |" * width]
     lines += ["| " + " | ".join(row) + " |" for row in rows[1:]]
     return [*lines, ""]
@@ -532,7 +494,7 @@ def field_lines(page: Page, node: Element) -> list[str]:
             )
         return [*lines, ""]
     rest = Element("div", {}, [child for child in node.children if child is not label])
-    return [f"- **{label.text()}**: {_collapse(inline(rest, page.url))}"]
+    return [f"- **{label.text()}**: {_squash(inline(page, rest))}"]
 
 
 def _list_end(lines: list[str]) -> list[str]:
@@ -540,224 +502,196 @@ def _list_end(lines: list[str]) -> list[str]:
     return [*lines, ""] if lines and lines[-1].startswith("- ") else lines
 
 
-def date_filter(page: Page, form: Element) -> list[str]:
-    """The release list's filter form: its target, its one select and the months offered."""
+def date_filter(page: Page, form: Element) -> str:
+    """One line for the release list's filter form: its select and the months offered."""
     selects = form.find_all("select")
     inputs = [item for item in form.find_all("input") if item.attrs.get("type") != "hidden"]
     if len(selects) != 1 or inputs:
-        raise page.changed(f"the filter form has {len(selects)} selects and {len(inputs)} inputs")
-    select = selects[0]
-    label = page.one(form, "label")
-    button = page.one(form, "button")
-    options = select.find_all("option")
-    first, months = options[0], options[1:]
-    lines = [
-        f"Filter form: `{form.attrs.get('method', '').upper()} "
-        f'{form.attrs.get("action", "")}`, button "{button.text()}"; the select '
-        f'`{select.attrs.get("name", "")}`, labelled "{label.text()}", offers '
-        f'`{first.attrs.get("value", "")}` ("{first.text()}"'
-        + (", selected" if "selected" in first.attrs else "")
-        + f") and {len(months)} months, each as `YYYY-MM` labelled with the month's name "
-        'and year (`2026-10` is "October 2026"), newest first:',
-        "",
-        "| Year | Months offered |",
-        "| --- | --- |",
-    ]
-    by_year: dict[str, list[str]] = {}
-    previous = "9999-99"
-    for option in months:
-        value = option.attrs.get("value", "")
-        match = _MONTH.fullmatch(value)
-        if not match or not 1 <= int(match.group(2)) <= 12:
-            raise page.changed(f"the filter offers {value!r}, not a month as YYYY-MM")
-        year, month = match.group(1), match.group(2)
-        if option.text() != f"{calendar.month_name[int(month)]} {year}":
-            raise page.changed(f"the filter labels {value!r} as {option.text()!r}")
-        if value >= previous or "selected" in option.attrs:
-            raise page.changed(f"the filter's month {value!r} is out of order or selected")
-        previous = value
-        by_year.setdefault(year, []).append(month)
-    lines += [f"| {year} | {', '.join(values)} |" for year, values in by_year.items()]
-    return [*lines, ""]
-
-
-def pager(page: Page, nav: Element) -> list[str]:
-    """The paging controls as a table: each item's text, link, label and state."""
-    lines = [
-        "Paging controls, in page order:",
-        "",
-        "| Text | Link | aria-label | Current |",
-        "| --- | --- | --- | --- |",
-    ]
-    for item in nav.find_all("li"):
-        links = item.find_all("a")
-        if len(links) > 1:
-            raise page.changed("a paging item with more than one link")
-        source = links[0] if links else item
-        href = f"`{links[0].attrs.get('href', '')}`" if links else ""
-        current = "yes" if links and links[0].has_class("usa-current") else ""
-        lines.append(
-            f"| {_cell(source.text())} | {href} | {_cell(source.attrs.get('aria-label', ''))} "
-            f"| {current} |"
+        raise _page_changed(
+            page.url, f"the filter has {len(selects)} selects, {len(inputs)} inputs"
         )
-    return [*lines, ""]
+    values = [option.attrs.get("value", "") for option in selects[0].find_all("option")]
+    months = values[1:]
+    if values[:1] != ["All"] or not months or not all(_MONTH.fullmatch(v) for v in months):
+        raise _page_changed(page.url, "the filter offers more than All and months as YYYY-MM")
+    return (
+        f"The list's filter form (`{form.attrs.get('method', '').upper()} "
+        f"{form.attrs.get('action', '')}`) offers, in the select "
+        f"`{selects[0].attrs.get('name', '')}`, `All` and months as `YYYY-MM`, from "
+        f"`{min(months)}` to `{max(months)}`."
+    )
+
+
+def paging(page: Page, nav: Element) -> tuple[int, int]:
+    """The ``?page=N`` of the paging links labelled "Page 1" and "Last page"."""
+    found: dict[str, int] = {}
+    for link in nav.find_all("a"):
+        label = link.attrs.get("aria-label", "")
+        match = _PAGE.fullmatch(link.attrs.get("href", ""))
+        if label in {"Page 1", "Last page"} and match:
+            found[label] = int(match.group(1))
+    if set(found) != {"Page 1", "Last page"}:
+        raise _page_changed(page.url, "no paging links labelled Page 1 and Last page")
+    return found["Page 1"], found["Last page"]
 
 
 def views_block(page: Page, node: Element) -> list[str]:
-    """A Drupal views block: its heading, filter form, tables and paging controls."""
+    """A Drupal views block: its heading, filter form, table and paging controls."""
     lines: list[str] = []
     for child in node.child_elements():
         if child.tag == "h2":
             lines += [f"## {child.text()}", ""]
         elif child.tag == "form":
-            lines += date_filter(page, child)
+            lines += [date_filter(page, child), ""]
         elif child.tag == "table":
             lines += table(page, child)
         elif child.tag == "nav" and child.has_class("usa-pagination"):
-            lines += pager(page, child)
+            first, last = paging(page, child)
+            lines += [
+                f'The list pages with `?page=N`: "Page 1" is `?page={first}`, the last page '
+                f"`?page={last}`.",
+                "",
+            ]
         elif child.tag == "div":
             lines += views_block(page, child)
         else:
-            raise page.changed(f"a views block holds a <{child.tag}> the script does not convert")
+            raise _page_changed(page.url, f"a views block holds a <{child.tag}>")
     if any(isinstance(child, str) and child.strip() for child in node.children):
-        raise page.changed("a views block holds loose text the script does not convert")
+        raise _page_changed(page.url, "a views block holds loose text")
     return lines
 
 
-def _header(url: str, *sentences: str) -> list[str]:
+def _converted(url: str) -> list[str]:
     return _paragraph(
-        f"Converted from {url} by `scripts/refresh_upstream.py`; `../FETCHED.md` records",
-        "the fetch. Kept: the page's main content; dropped: breadcrumbs, the site's header,",
-        "navigation and footer, and screen-reader-only text. Links are absolute URLs; a",
-        "date is its text with its `datetime` attribute in parentheses.",
-        *sentences,
+        f"Converted from {url} by `scripts/refresh_upstream.py`; see `../FETCHED.md`."
     )
 
 
-def publication_markdown(page: Page) -> tuple[str, str]:
-    """The publication page as Markdown, and the URL of its newest release's view page."""
+def _first_row(page: Page, block: Element) -> Element:
+    rows = page.one(block, "tbody").find_all("tr")
+    if not rows:
+        raise _page_changed(page.url, "a release table without rows")
+    return rows[0]
+
+
+def _release_key(row: Element) -> tuple[str, ...]:
+    """A release row's date and file links, to compare two tables' rows."""
+    times = [item.attrs.get("datetime", "") for item in row.find_all("time")[:1]]
+    files = sorted(
+        link.attrs.get("href", "")
+        for link in row.find_all("a")
+        if "/release-files/" in link.attrs.get("href", "")
+    )
+    return (*times, *files)
+
+
+def publication_markdown(page: Page) -> tuple[str, str, int]:
+    """The publication page as Markdown, its newest release's URL and its last page."""
     main = page.main()
     article = page.one(main, "article", "node--type-publication")
-    lines = [
-        f"# {page.title(main)}",
-        "",
-        *_header(
-            page.url,
-            "The paging controls' links are kept as given. The release list changes with",
-            "every release (monthly for this publication), and so does this file; only the",
-            "list's first page is kept.",
-        ),
-    ]
+    lines = [f"# {page.one(main, 'h1').text()}", "", *_converted(page.url)]
     regions = [item for item in article.elements() if item.has_class("layout__region")]
     if not regions:
-        raise page.changed("no layout regions in the publication article")
+        raise _page_changed(page.url, "no layout regions in the publication article")
     for region in regions:
         for block in region.child_elements():
             if not block.has_class("block"):
-                raise page.changed(f"a region holds a <{block.tag}> that is not a block")
+                raise _page_changed(page.url, f"a region holds a <{block.tag}>, not a block")
             if block.has_class("block-views"):
                 lines = _list_end(lines) + views_block(page, block)
             elif block.find_all("div", "field__label"):
                 for item in block.find_all("div", "field"):
                     lines += field_lines(page, item)
             elif block.find_all("div", "field__item"):
-                lines = _list_end(lines) + blocks(page, block)
+                lines = _list_end(lines) + paragraphs(page, block)
             else:
-                raise page.changed(f"a block of class {block.attrs.get('class')!r}")
-    lines = _list_end(lines)
+                raise _page_changed(page.url, f"a block of class {block.attrs.get('class')!r}")
 
+    releases = page.one(article, "div", _RELEASES_BLOCK)
+    first = _first_row(page, releases)
+    latest = _release_key(_first_row(page, page.one(article, "div", _LATEST_BLOCK)))
+    if _release_key(first) != latest:
+        raise _page_changed(
+            page.url,
+            f"the release list's first row {_release_key(first)} is not the Latest Release "
+            f"{latest}, so the newest release is unclear",
+        )
     path = urlsplit(page.url).path
-    views = [
-        link
-        for link in article.find_all("a")
-        if link.text() == "View"
-        and link.attrs.get("href", "").startswith(f"{path}/")
-        and _RELEASE_PATH.fullmatch(link.attrs["href"][len(path) :])
-    ]
-    if not views:
-        raise page.changed("no release view link in the release list")
-    release_url = urljoin(page.url, views[0].attrs["href"])
-    return _join(lines), release_url
+    views = [link for link in first.find_all("a") if link.text() == "View"]
+    href = views[0].attrs.get("href", "") if len(views) == 1 else ""
+    if not href.startswith(f"{path}/") or not _RELEASE_PATH.fullmatch(href[len(path) :]):
+        raise _page_changed(page.url, f"the first release's View link is {href!r}")
+    _, last = paging(page, page.one(releases, "nav", "usa-pagination"))
+    return _join(_list_end(lines)), urljoin(page.url, href), last
 
 
 def release_markdown(page: Page) -> str:
     """A release view page as Markdown: its fields in page order."""
     main = page.main()
     article = page.one(main, "article", "node--type-release")
-    lines = [
-        f"# {page.title(main)}",
-        "",
-        *_header(
-            page.url,
-            "This is the view page of the publication's newest release, the first row of",
-            "its release list, so this file changes with every release.",
-        ),
-    ]
+    lines = [f"# {page.one(main, 'h1').text()}", "", *_converted(page.url)]
     fields = article.find_all("div", "field")
     if not fields:
-        raise page.changed("no fields in the release article")
+        raise _page_changed(page.url, "no fields in the release article")
     for item in fields:
-        lines = (_list_end(lines) if item.find_all("div", "nal-file") else lines) + field_lines(
-            page, item
-        )
-    if _collapse(article.text()) != _collapse(" ".join(item.text() for item in fields)):
-        raise page.changed("the release article holds text outside its fields")
+        if item.find_all("div", "nal-file"):
+            lines = _list_end(lines)
+        lines += field_lines(page, item)
+    if article.text() != _squash(" ".join(item.text() for item in fields)):
+        raise _page_changed(page.url, "the release article holds text outside its fields")
     return _join(_list_end(lines))
 
 
 def calendar_markdown(page: Page) -> tuple[str, int]:
     """The calendar excerpt, and the number of events the page holds."""
     main = page.main()
-    title = page.title(main)
+    title = page.one(main, "h1").text()
     if not main.find_all("div", "fullcalendar--wrapper"):
-        raise page.changed("no fullcalendar container in the main content")
+        raise _page_changed(page.url, "no fullcalendar container in the main content")
     if main.text() != title or main.find_all("table"):
-        raise page.changed("the main content holds more than the heading and the calendar")
+        raise _page_changed(page.url, "the main content holds more than a heading and a calendar")
     calendars = page.settings().get("fullcalendar")
     if not isinstance(calendars, dict) or len(calendars) != 1:
-        raise page.changed("expected one calendar under fullcalendar in the settings")
+        raise _page_changed(page.url, "expected one calendar under fullcalendar")
     settings = next(iter(calendars.values()))
     options = settings.get("options") if isinstance(settings, dict) else None
     if not isinstance(settings, dict) or not isinstance(options, dict):
-        raise page.changed("the calendar's settings have no options object")
+        raise _page_changed(page.url, "the calendar's settings have no options object")
     sources = options.get("eventSources")
     if not isinstance(sources, list) or not all(isinstance(s, list) for s in sources):
-        raise page.changed("options.eventSources is not a list of event lists")
+        raise _page_changed(page.url, "options.eventSources is not a list of event lists")
     events: list[Any] = [event for source in sources for event in source]
     if not events or not all(isinstance(event, dict) for event in events):
-        raise page.changed("the calendar holds no events, or events that are not objects")
+        raise _page_changed(page.url, "no events, or events that are not objects")
+    names = list(events[0])
+    if any(list(event) != names for event in events):
+        raise _page_changed(page.url, "the events no longer all have the same fields")
+    starts = []
+    for event in events:
+        try:
+            starts.append(datetime.fromisoformat(str(event["start"])))
+        except (KeyError, ValueError):
+            raise _page_changed(page.url, f"an event's start is not ISO 8601: {event}") from None
     shown = {
         **settings,
         "options": {key: value for key, value in options.items() if key != "eventSources"},
     }
-    names = list(events[0])
-    uniform = all(list(event) == names for event in events)
     ids = {json.dumps(event.get("id")) for event in events}
-    starts = []
-    for event in events:
-        try:
-            starts.append(datetime.fromisoformat(str(event.get("start"))))
-        except ValueError:
-            raise page.changed(f"an event's start {event.get('start')!r} is not ISO 8601") from None
-    first, last = min(starts), max(starts)
     kept = events[:CALENDAR_EVENTS]
     lines = [
         f"# {title}",
         "",
         *_paragraph(
-            f"An excerpt of {page.url}, written by `scripts/refresh_upstream.py`;",
-            "`../FETCHED.md` records the fetch, with the full page's size and sha256. The",
-            "page changes daily, so this file keeps its structure only. Its main content is",
-            "the heading above and an empty calendar container, which the browser fills",
-            "from the events in the page's `drupal-settings-json`; the page has no HTML",
-            "table. Breadcrumbs, the site's header, navigation and footer are dropped.",
+            f"An excerpt of {page.url} by `scripts/refresh_upstream.py`; see `../FETCHED.md`.",
+            "The page's main content is the heading above and an empty calendar container,",
+            "which the browser fills from the events in the page's `drupal-settings-json`.",
         ),
         "## Calendar settings",
         "",
         *_paragraph(
             "The page's `drupal-settings-json` holds one calendar under `fullcalendar`, keyed",
-            "by a view DOM id (`js-view-dom-id-…`, left out here). Its settings as fetched,",
-            "`options.eventSources` left out:",
+            "by a view DOM id (left out here). Its settings, `options.eventSources` left out,",
+            "re-serialised with `json.dumps`, values as fetched:",
         ),
         "```json",
         json.dumps(shown, indent=2, ensure_ascii=False),
@@ -769,22 +703,16 @@ def calendar_markdown(page: Page) -> tuple[str, int]:
             f"`options.eventSources` holds {len(sources)}",
             "event source" if len(sources) == 1 else "event sources",
             f"with {len(events)} events in all, for {len(ids)} distinct `id`s, their `start`",
-            "from",
-            f"`{first.isoformat()}` to `{last.isoformat()}`.",
-            (
-                "Every event has the same fields, in this order:"
-                if uniform
-                else "Not every event has the same fields; the first event's, in order:"
-            ),
-            ", ".join(f"`{name}`" for name in names) + ".",
-            f"The first {len(kept)} events as fetched, one JSON object per line:",
+            f"from `{min(starts).isoformat()}` to `{max(starts).isoformat()}`. Every event has",
+            "the same fields, in this order:",
+            ", ".join(f"`{name}`" for name in names) + f". The first {len(kept)} events, one",
+            "JSON object per line, re-serialised with `json.dumps`, values as fetched:",
         ),
         "```json",
         *(json.dumps(event, ensure_ascii=False) for event in kept),
         "```",
         "",
-        f"\N{HORIZONTAL ELLIPSIS} {len(events) - len(kept)} more rows not kept "
-        "(the page changes daily)",
+        f"\N{HORIZONTAL ELLIPSIS} {len(events) - len(kept)} more events not kept",
     ]
     return _join(lines), len(events)
 
@@ -798,54 +726,39 @@ def _join(lines: list[str]) -> str:
 # --- the pages ------------------------------------------------------------------------
 
 
-def documentation_page() -> tuple[Row, str]:
-    """Record the API documentation page and read the OpenAPI document's URL from it."""
+def documentation_page() -> tuple[Row, str, int]:
+    """Record the API documentation page; read the OpenAPI URL and the footer from it."""
     response = fetch(DOCS_URL)
     page = html_page(response)
-    main = page.main()
-    article = page.one(main, "article", "node--type-api-documentation")
+    article = page.one(page.main(), "article", "node--type-api-documentation")
     if article.text() or not any(
         item.attrs.get("id", "").startswith("swagger-ui-") for item in article.elements()
     ):
-        raise page.changed("the article is no longer an empty Swagger UI container")
+        raise _page_changed(page.url, "the article is no longer an empty Swagger UI container")
     value: Any = page.settings()
     for key in SWAGGER_KEY:
         if not isinstance(value, dict) or key not in value:
-            raise page.changed(f"{_SETTINGS} has no {'.'.join(SWAGGER_KEY)}")
+            raise _page_changed(page.url, f"{_SETTINGS} has no {'.'.join(SWAGGER_KEY)}")
         value = value[key]
     formatters = page.settings().get(SWAGGER_KEY[0])
     if not isinstance(value, str) or not isinstance(formatters, dict) or len(formatters) != 1:
-        raise page.changed(f"expected one Swagger UI file under {SWAGGER_KEY[0]}")
+        raise _page_changed(page.url, f"expected one Swagger UI file under {SWAGGER_KEY[0]}")
     parts = urlsplit(value)
     if parts.scheme != "https" or parts.netloc != HOST:
-        raise page.changed(f"the OpenAPI document's URL {value!r} left https://{HOST}")
+        raise _page_changed(page.url, f"the OpenAPI document's URL {value!r} left https://{HOST}")
+    footer = [
+        nav for nav in page.root.find_all("nav") if nav.attrs.get("aria-label") == FOOTER_LABEL
+    ]
+    links = [link.attrs.get("href", "") for nav in footer for link in nav.find_all("a")]
+    missing = [url for url in (POLICIES_URL, QUALITY_URL) if url not in links]
+    if len(footer) != 1 or missing:
+        raise _page_changed(page.url, f"the footer's {FOOTER_LABEL!r} no longer links {missing}")
     note = (
         f"{_redirect_note(response)}Drupal page whose main content is an empty Swagger UI "
         f"container, no documentation text; its `drupal-settings-json` names the OpenAPI "
         f"document at `{'.'.join(SWAGGER_KEY)}`: `{value}`"
     )
-    return Row(response, note), value
-
-
-def _top_level(lines: list[str]) -> dict[str, list[str]]:
-    """The document's top-level keys, each with the indented lines below it."""
-    blocks: dict[str, list[str]] = {}
-    current: list[str] | None = None
-    for line in lines:
-        if line and not line[0].isspace() and not line.startswith("#"):
-            key, _, rest = line.partition(":")
-            current = blocks.setdefault(key, [rest.strip()] if rest.strip() else [])
-        elif current is not None:
-            current.append(line)
-    return blocks
-
-
-def _scalar(block: list[str], key: str, indent: int, url: str) -> str:
-    prefix = f"{' ' * indent}{key}:"
-    for line in block:
-        if line.startswith(prefix) and not line[len(prefix) :].startswith(" |"):
-            return line[len(prefix) :].strip().strip("'\"")
-    raise SystemExit(f"GET {url}: no {key} where the script reads it")
+    return Row(response, note), value, len(links)
 
 
 def openapi_row(url: str) -> Row:
@@ -853,52 +766,26 @@ def openapi_row(url: str) -> Row:
     response = fetch(url)
     text = _text(response)
     _no_statement(response, text)
-    top = _top_level(text.splitlines())
-    if not top.get("openapi", [""])[0].startswith("3."):
-        raise SystemExit(f"GET {url}: not an OpenAPI 3 document")
-    for name in ("info", "servers", "paths"):
-        if name not in top:
-            raise SystemExit(f"GET {url}: no top-level {name}")
-    version = top["openapi"][0]
-    title = _scalar(top["info"], "title", 2, url)
-    api = _scalar(top["info"], "version", 2, url)
-    server = _scalar([line.replace("- ", "  ", 1) for line in top["servers"]], "url", 4, url)
-    stated = [
-        name
-        for name in ("license", "termsOfService", "contact")
-        if any(line.startswith(f"  {name}:") for line in top["info"])
-    ]
+    version = re.match(r"openapi:\s*(3\.\S*)", text)
+    info = re.search(r"^info:[^\n]*\n((?:[ \t][^\n]*\n|\r?\n)*)", text, re.MULTILINE)
+    if not version or not info:
+        raise SystemExit(f"GET {url}: not an OpenAPI 3 document with an info object")
+    stated = re.findall(r"^  (license|termsOfService|contact):", info.group(1), re.MULTILINE)
     if stated:
         raise SystemExit(
             f"GET {url}: info now names {stated}, which FETCHED.md's Attribution says it "
             "does not.\nLook at the document by hand and update scripts/refresh_upstream.py. "
             "Nothing was written."
         )
-    methods: dict[str, int] = {}
-    groups: list[str] = []
-    path = ""
-    for line in top["paths"]:
-        if line.startswith("  /") and line.rstrip().endswith(":"):
-            path = line.strip().removesuffix(":")
-            group = "/".join(path.split("/")[:4]) + "/"
-            if group not in groups:
-                groups.append(group)
-        elif re.fullmatch(r"    (get|put|post|delete|patch|head|options|trace):\s*", line):
-            if not path:
-                raise SystemExit(f"GET {url}: an operation outside a path")
-            method = line.strip().removesuffix(":").upper()
-            methods[method] = methods.get(method, 0) + 1
-    count = sum(methods.values())
-    if not count or count != len(re.findall(r"^\s+operationId:", text, re.MULTILINE)):
-        raise SystemExit(f"GET {url}: operations and operationIds do not match in number")
-    secured = "security" in top or re.search(r"^\s+securitySchemes:", text, re.MULTILINE)
+    count = len(re.findall(r"^[ \t]+operationId:", text, re.MULTILINE))
+    if not count:
+        raise SystemExit(f"GET {url}: no operationId in the document")
+    secured = re.search(r"^(?:security:|[ \t]+securitySchemes:)", text, re.MULTILINE)
     crlf, lf = response.body.count(b"\r\n"), response.body.count(b"\n")
     endings = "CRLF" if crlf == lf else "LF" if not crlf else "mixed"
-    by_method = ", ".join(f"{n} {m}" for m, n in methods.items())
     note = (
         f"{_redirect_note(response)}verbatim, byte for byte ({endings} line endings, as "
-        f"served); OpenAPI {version}, `{title}` {api}, server `{server}`; {count} operations "
-        f"({by_method}) under {', '.join(f'`{group}`' for group in groups)}; "
+        f"served); OpenAPI {version.group(1)}, {count} operations by `operationId`; "
         + ("declares security; " if secured else "no `securitySchemes` or `security`; ")
         + "`info` names no licence, terms of service or contact"
     )
@@ -908,21 +795,17 @@ def openapi_row(url: str) -> Row:
 def publication_row() -> tuple[Row, str]:
     """Fetch and convert the publication page; return its newest release's URL too."""
     response = fetch(PUBLICATION_URL)
-    content, release_url = publication_markdown(html_page(response))
-    last = re.findall(r"\| Last \| `\?page=(\d+)`", content)
-    pages = f"{int(last[0]) + 1} pages (`?page=0` to `?page={last[0]}`)" if last else ""
+    content, release_url, last = publication_markdown(html_page(response))
     note = (
         f"{_redirect_note(response)}converted to Markdown; Bytes and sha256 are the HTML "
-        f"page's; the first of the release list's {pages or 'one page'}, which changes "
-        "with every release"
+        f"page's; the first of the release list's {last + 1} pages (`?page=0` to "
+        f"`?page={last}`), which changes with every release"
     )
     return Row(response, note, PUBLICATION_FILE, content.encode("utf-8")), release_url
 
 
 def release_row(url: str) -> Row:
     """Fetch and convert the newest release's view page."""
-    if not url.startswith(PUBLICATION_URL + "/"):
-        raise _page_changed(PUBLICATION_URL, f"the newest release's link {url!r} left the page")
     response = fetch(url)
     content = release_markdown(html_page(response))
     note = (
@@ -940,7 +823,7 @@ def calendar_row() -> Row:
     note = (
         f"{_redirect_note(response)}excerpt, not the page: the heading, the calendar's "
         f"settings and the first {CALENDAR_EVENTS} of its {events} events from the page's "
-        "`drupal-settings-json`; Bytes and sha256 are the full page's; changes daily"
+        "`drupal-settings-json`; Bytes and sha256 are the full page's"
     )
     return Row(response, note, CALENDAR_FILE, content.encode("utf-8"))
 
@@ -973,8 +856,7 @@ def policies_row() -> Row:
 def quality_row() -> Row:
     """Record the Information Quality page the footer links to; it states no licence."""
     response = fetch(QUALITY_URL)
-    text = _text(response)
-    _no_statement(response, text)
+    _no_statement(response, parse_html(_text(response)).text())
     note = (
         f'{_redirect_note(response)}the footer\'s "Information Quality" (ARS); states no '
         "copyright, licence or terms of use"
@@ -997,8 +879,8 @@ def _paragraph(*sentences: str) -> list[str]:
     return [*wrapped.splitlines(), ""]
 
 
-def render_fetched(rows: list[Row], yaml_url: str, fetched: str) -> str:
-    """The whole of ``FETCHED.md``."""
+def render_fetched(rows: list[Row], yaml_url: str, footer_links: int, fetched: str) -> str:
+    """The whole of ``FETCHED.md``: the one statement of how the snapshot is captured."""
     lines = [
         "# Upstream documentation snapshot \N{EM DASH} USDA ESMIS",
         "",
@@ -1012,17 +894,19 @@ def render_fetched(rows: list[Row], yaml_url: str, fetched: str) -> str:
         "## Attribution",
         "",
         *_paragraph(
-            "None stated. The ESMIS pages this script fetches (the API documentation page, a",
-            "publication page, a release page and the release calendar) carry no copyright",
-            "line, licence or terms of use, and the OpenAPI document's `info` names no",
-            "licence, terms of service or contact. The site's footer links to two policy",
-            f'pages: "Policies and Links", {POLICIES_URL}, which the CDN edge answers with',
-            "403 Access Denied to this script, so what it states is not read here; and",
-            f'"Information Quality", {QUALITY_URL}, which states no copyright, licence or',
-            "terms of use. The script stops if any page it reads starts to state one. The",
-            "documentation's text is reproduced here as this package's reference (ADR-0003);",
-            "an objection from the publisher is met by replacing it with a summary that keeps",
-            "the names and semantics the wrappers rely on.",
+            "None stated. The visible text of the ESMIS pages this script fetches (the API",
+            "documentation page, a publication page, a release page and the release",
+            "calendar) carries no copyright line, licence or terms of use, and the OpenAPI",
+            "document's `info` names no licence, terms of service or contact. The site's",
+            f'footer lists {footer_links} links under "{FOOTER_LABEL}"; two of them could',
+            f'carry terms of use and are the ones read: "Policies and Links", {POLICIES_URL},',
+            "which the CDN edge answers with 403 Access Denied to this script, so what it",
+            f'states is not read here; and "Information Quality", {QUALITY_URL}, which',
+            "states no copyright, licence or terms of use. The script stops if any page it",
+            "reads starts to state one. The documentation's text is reproduced here as this",
+            "package's reference (ADR-0003); an objection from the publisher is met by",
+            "replacing it with a summary that keeps the names and semantics the wrappers rely",
+            "on.",
         ),
         "## How this is captured",
         "",
@@ -1040,40 +924,43 @@ def render_fetched(rows: list[Row], yaml_url: str, fetched: str) -> str:
             "The publication page of the World Agricultural Supply and Demand Estimates",
             "(WASDE) and the view page of its newest release, the first row of the",
             "publication's release list, are converted to Markdown with the standard",
-            "library's `html.parser`: the page's main content is kept, its breadcrumbs, the",
+            "library's `html.parser`. The page's main content is kept; its breadcrumbs, the",
             "site's header, navigation and footer and the screen-reader-only text inside",
-            "links are dropped; links become absolute URLs and a date its text with its",
-            "`datetime` attribute in parentheses; the release list's date filter is kept as",
-            "its parameter and the months it offers, the paging controls as a table. No table",
-            "on these pages has merged cells or a nested table, so none is kept as HTML. A",
-            "page structure the converter does not know stops the run. Both files change with",
-            "every release; their rows' Bytes and sha256 are those of the HTML pages.",
+            "links are dropped. Links become absolute URLs and a date its text with its",
+            "`datetime` attribute in parentheses; the release list's date filter and its",
+            "paging controls become one line each, the months offered and the last page. No",
+            "table on these pages has merged cells or a nested table, so none is kept as",
+            "HTML. The run stops on a page structure the converter does not know, and when",
+            "the release list's first row is not the page's Latest Release. Both files change",
+            "with every release; their rows' Bytes and sha256 are those of the HTML pages.",
         ),
         *_paragraph(
             "The release calendar has no HTML table: the browser draws it from the events in",
             f"the page's `drupal-settings-json`. `{CALENDAR_FILE}` is an excerpt: the page's",
             "heading, the calendar's settings without the events, the events' count and field",
-            f"names, and the first {CALENDAR_EVENTS} events as fetched, one JSON object per",
-            "line, then a line counting the events not kept. Its row's Bytes and sha256 are",
-            "those of the full page.",
+            f"names, and the first {CALENDAR_EVENTS} events, one JSON object per line, all",
+            "re-serialised with `json.dumps`, values as fetched (upstream writes `/` as `\\/`);",
+            "then a line counting the events not kept. Its row's Bytes and sha256 are those",
+            "of the full page, and its Last-Modified is the time Drupal last rendered it; on",
+            "2026-10-27 two runs 1.5 minutes apart gave identical bytes.",
         ),
         *_paragraph(
             "Pages without documentation text get no file, only a row: the API documentation",
             "page, with its HTTP status and the size and sha256 of its body; ESMIS's former",
             f"API address at Cornell's Mann Library, {CORNELL_URL}, which redirects to",
             f"{CORNELL_TARGET}, which answers 404, recorded by status only; and the two",
-            "policy pages under Attribution, USDA's by status only, since its 403 body",
+            "footer pages under Attribution, USDA's by status only, since its 403 body",
             "carries a per-request reference.",
         ),
         *_paragraph(
-            "Against the same upstream, two runs write byte-identical files, but for the",
-            "calendar excerpt, a page that changes daily, and this file differs in its",
-            "Fetched column and in the ETag and Last-Modified of any ESMIS page that Drupal",
-            "rendered anew in between. Drupal renders these pages into a cache, and their",
-            "ETag and Last-Modified are the time of that rendering, so a new rendering changes",
-            "them even when the page is the same byte for byte. Ids that Drupal may generate",
-            "per rendering (`js-view-dom-id-…`, form ids) are left out of the Markdown files;",
-            "where a new rendering changes them, the page's Bytes and sha256 change here too.",
+            "Against the same upstream, two runs write byte-identical files under `openapi/`",
+            "and `pages/`, and this file differs in its Fetched column and in the ETag and",
+            "Last-Modified of any ESMIS page that Drupal rendered anew in between. Drupal",
+            "renders these pages into a cache, and their ETag and Last-Modified are the time",
+            "of that rendering, so a new rendering changes them even when the page is the",
+            "same byte for byte. Ids that Drupal may generate per rendering",
+            "(`js-view-dom-id-…`, form ids) are left out of the Markdown files; where a new",
+            "rendering changes them, the page's Bytes and sha256 change here too.",
         ),
         *_paragraph(
             "Fetched is the UTC time the run started, in ISO 8601 with an explicit Z, the",
@@ -1133,7 +1020,7 @@ def main() -> None:
     fetched = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     _log(f"API documentation: {DOCS_URL}")
-    docs_page, yaml_url = documentation_page()
+    docs_page, yaml_url, footer_links = documentation_page()
     yaml_row = openapi_row(yaml_url)
     _log("Pages converted to Markdown")
     publication, release_url = publication_row()
@@ -1143,7 +1030,7 @@ def main() -> None:
     shells = [docs_page, cornell_row(), policies_row(), quality_row()]
 
     rows = [yaml_row, publication, release, excerpt, *shells]
-    write_snapshot(out, rows, render_fetched(rows, yaml_url, fetched))
+    write_snapshot(out, rows, render_fetched(rows, yaml_url, footer_links, fetched))
     written = sum(1 for row in rows if row.path)
     _log(
         f"Wrote {written} files and FETCHED.md under {out} (Fetched {fetched}); "
