@@ -27,20 +27,21 @@ What every task follows:
   ``InvalidRequestError``.
 - Paging: pages are 0-based and hold 25 items. ``page`` given returns that page; omitted,
   ``_Pages`` walks them from page 0.
-- Release times: ``meta.vintage`` is the release id as printed (``"796099"``).
-  ``meta.published_at`` stays ``None`` at this core pin, which has no
-  ``published_at_naive``: ESMIS prints ``release_datetime`` with ``+0000`` where its own
-  calendar and the files' ``Last-Modified`` put the release at noon Eastern, so the
-  printed wall-clock time, its offset dropped and the flag set, arrives with the second
-  core re-pin (PR 5); no zone is attached and no time corrected. ``Release`` keeps the
-  value as printed.
+- Release times: ``meta.vintage`` is the release id as printed (``"796099"``). The four
+  tasks about one release (``get_release``, ``get_latest_release``, ``list_release_files``,
+  ``download_release_file``) set ``meta.published_at`` to its ``release_datetime`` as
+  printed with its ``+0000`` dropped, flagged ``published_at_naive`` (ADR-0022): ESMIS
+  prints ``+0000`` where its own calendar and the files' ``Last-Modified`` put the release
+  at noon Eastern, so the time is upstream's text; no zone is attached and no time
+  converted. ``Release`` keeps the value as printed; the list tasks leave
+  ``meta.published_at`` empty.
 - A catalog, never a parser (ADR-0020): no task reads a file's contents, and nothing is
   stored or cached; ``download_release_file`` writes where the caller says.
 """
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from os import PathLike
 from urllib.parse import quote, urlsplit
 
@@ -160,9 +161,21 @@ def _files(release: Release) -> list[ReleaseFile]:
     return files
 
 
+def _printed(release: Release) -> datetime:
+    """``release_datetime`` as printed, its ``+0000`` dropped, never converted (ADR-0022)."""
+    return release.release_datetime.replace(tzinfo=None)
+
+
 def _release_meta(endpoint: str, release: Release, request: dict[str, object]) -> ResultMeta:
-    """``ResultMeta`` of a task about one release: ``vintage`` its id as printed."""
-    return ResultMeta(source=SOURCE, endpoint=endpoint, vintage=release.id, request=request)
+    """``ResultMeta`` of a task about one release: its printed time, its id as printed."""
+    return ResultMeta(
+        source=SOURCE,
+        endpoint=endpoint,
+        published_at=_printed(release),
+        published_at_naive=True,
+        vintage=release.id,
+        request=request,
+    )
 
 
 async def _release(release_id: int) -> Release:
@@ -330,9 +343,10 @@ async def get_release_async(release_id: int) -> Result[Release]:
 
     One request (``esmis_api_release_findById``); an id ESMIS does not know raises
     ``NotFoundError`` (HTTP 404). ``meta.vintage`` is the release id, e.g. ``"796099"``.
-    ``meta.published_at`` stays empty until the second core re-pin (PR 5), which brings
-    the printed time as a wall-clock time without its ``+0000``, since ESMIS's own
-    calendar puts it at noon Eastern; ``release_datetime`` keeps the time as printed.
+    ``meta.published_at`` is the release's ``release_datetime`` as printed with its
+    ``+0000`` dropped, flagged ``published_at_naive``: ESMIS's own calendar puts the
+    release at noon Eastern while the API prints ``+0000``, so the time is upstream's
+    text, never converted. ``release_datetime`` keeps the time as printed.
 
     Args:
         release_id: A ``Release.id`` as a number, e.g. ``796099`` (the WASDE of
@@ -350,10 +364,11 @@ async def get_latest_release_async(publication_identifier: str) -> Result[Releas
     the ids do not follow the dates). It relies on ESMIS listing a publication's releases
     newest first by ``release_datetime``, an order observed on 2026-10-27, not documented.
     An identifier ESMIS does not know, or a publication without releases, raises
-    ``NotFoundError``. ``meta.vintage`` is the release id. ``meta.published_at`` stays
-    empty until the second core re-pin (PR 5), which brings the printed time as a
-    wall-clock time without its ``+0000``, since ESMIS's own calendar puts it at noon
-    Eastern; ``release_datetime`` keeps the time as printed.
+    ``NotFoundError``. ``meta.vintage`` is the release id. ``meta.published_at`` is the
+    release's ``release_datetime`` as printed with its ``+0000`` dropped, flagged
+    ``published_at_naive``: ESMIS's own calendar puts the release at noon Eastern while
+    the API prints ``+0000``, so the time is upstream's text, never converted.
+    ``release_datetime`` keeps the time as printed.
 
     Args:
         publication_identifier: One of a publication's ``identifier`` values, e.g.
@@ -380,9 +395,10 @@ async def list_release_files_async(release_id: int) -> Result[list[ReleaseFile]]
     the extension lowercased (``"pdf"``, ``"txt"``, ``"xls"``, ``"xml"``, ``"zip"``); one to
     four per recorded release. The catalog states no size. An id ESMIS does not know
     raises ``NotFoundError``. ``download_release_file`` fetches a file in Python; no MCP
-    tool downloads. ``meta.vintage`` is the release id. ``meta.published_at`` stays empty
-    until the second core re-pin (PR 5), which brings the printed time as a wall-clock
-    time without its ``+0000``, since ESMIS's own calendar puts it at noon Eastern.
+    tool downloads. ``meta.vintage`` is the release id. ``meta.published_at`` is the
+    release's ``release_datetime`` as printed with its ``+0000`` dropped, flagged
+    ``published_at_naive``: ESMIS's own calendar puts the release at noon Eastern while
+    the API prints ``+0000``, so the time is upstream's text, never converted.
 
     Args:
         release_id: A ``Release.id`` as a number, e.g. ``796099`` (the WASDE of
@@ -408,9 +424,10 @@ async def download_release_file_async(
     ``meta.endpoint`` is the file's name as upstream prints it (``"wasde1026.txt"``),
     ``meta.vintage`` the release id, ``meta.request`` the release id, the format and the
     file's URL, and ``meta.retrieved_at`` the time the file was complete.
-    ``meta.published_at`` stays empty until the second core re-pin (PR 5), which brings
-    the printed time as a wall-clock time without its ``+0000``, since ESMIS's own
-    calendar puts it at noon Eastern.
+    ``meta.published_at`` is the release's ``release_datetime`` as printed with its
+    ``+0000`` dropped, flagged ``published_at_naive``: ESMIS's own calendar puts the
+    release at noon Eastern while the API prints ``+0000``, so the time is upstream's
+    text, never converted.
 
     Args:
         release_id: A ``Release.id`` as a number, e.g. ``796099`` (the WASDE of
@@ -434,6 +451,8 @@ async def download_release_file_async(
         source=SOURCE,
         endpoint=chosen.name,
         retrieved_at=downloaded.retrieved_at,
+        published_at=_printed(release),
+        published_at_naive=True,
         vintage=release.id,
         request={"release_id": release_id, "format": format, "url": chosen.url},
     )

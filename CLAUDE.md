@@ -71,12 +71,12 @@ wrapper from memory of the API.
   calendar and file times put the release at noon Eastern (README, the zone-label item),
   and `Publication.upcoming_releases` print Eastern offsets (`2026-10-28T15:00:00-0400`,
   `2026-11-04T15:00:00-0500`), which the model keeps. Decided by Johannes on 2026-10-27:
-  `Release.release_datetime` keeps the time as printed, an aware datetime at `+00:00`; a
-  task's `meta.published_at` carries the wall-clock time with the offset dropped and
-  `published_at_naive=True` once the core pin carries ADR-0022's flag, and stays empty
-  before; `meta.vintage` is the release id. The current pin has no `published_at_naive`,
-  so every task leaves `meta.published_at` empty; the wall-clock time with the flag
-  arrives with the second re-pin (PR 5).
+  `Release.release_datetime` keeps the time as printed, an aware datetime at `+00:00`;
+  the four tasks about one release (`get_release`, `get_latest_release`,
+  `list_release_files`, `download_release_file`) set `meta.published_at` to that time
+  with the offset dropped (`.replace(tzinfo=None)`, the printed wall-clock time, never
+  converted) and `published_at_naive=True` (ADR-0022, rule 2); the list tasks leave it
+  empty. `meta.vintage` is the release id.
 - **Tasks.** Eight, the contract of `xippios-usda-wasde` (ADR-0021). A paged task given
   `page` returns that page; without it, `tasks._Pages` walks the pages from 0 with core's
   `paginate_offset` (`page = offset // 25`), bounded by the last answer's
@@ -99,11 +99,11 @@ wrapper from memory of the API.
   current WASDE `.txt` (about 120 KB), for the fixture (`release_files/
   wasde1026_txt.json`, recorded whole) and for the nightly live test, which writes it
   to a temporary directory.
-- **The core pin.** The package builds on a git pin of sdk-core `main` at `787b60c`,
-  set in `[tool.uv.sources]` by the re-pin (`core_version` stays 0.2.1), which carries
-  ADR-0019's `download` and `BULK_TASKS` skip; a PR of its own replaces the pin with the
-  core release that carries them, from PyPI, before the release (conventions §15, item
-  1).
+- **The core pin.** The package builds on a git pin of sdk-core `main` at `cb8ecdf`,
+  set in `[tool.uv.sources]` (`core_version` stays 0.2.1), which carries ADR-0019's
+  `download` and `BULK_TASKS` skip and ADR-0022's `published_at_naive`. The pin goes at
+  the adoption of template v0.3.0 and core 0.3.0, which release them: a PR of its own,
+  before the release, takes core from PyPI (conventions §15, item 1).
 
 ## Read first, in this order
 

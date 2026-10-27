@@ -55,6 +55,8 @@ API = f"{BASE_URL}/api/v1"
 WASDE_RELEASES = f"{API}/release/findByIdentifier/wasde"
 WASDE_TXT = f"{BASE_URL}/sites/default/release-files/796099/wasde1026.txt"
 FORMATS = {"pdf", "txt", "xls", "xml", "zip"}
+OCTOBER_PRINTED = datetime(2026, 10, 9, 12, 0)
+"""The October 2026 WASDE's ``release_datetime`` as printed, its ``+0000`` dropped."""
 
 
 def recorded[T](type_: type[T], endpoint: str, case: str) -> T:
@@ -235,7 +237,7 @@ def test_get_release(replay_fixture: ReplayFixture) -> None:
     assert result.data.release_datetime == datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
     assert result.meta.endpoint == "esmis_api_release_findById"
     assert result.meta.vintage == "796099"
-    assert result.meta.published_at is None, "until the pin carries published_at_naive"
+    assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
     assert result.meta.request == {"release_id": 796099}
     assert result.meta.total is None
     assert sent_urls(route) == [f"{API}/release/findById/796099"]
@@ -255,7 +257,7 @@ def test_get_latest_release(replay_fixture: ReplayFixture) -> None:
     assert result.data.id == "796099"
     assert result.meta.endpoint == "esmis_api_release_findByIdentifier"
     assert result.meta.vintage == "796099"
-    assert result.meta.published_at is None
+    assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
     assert result.meta.request == {"publication_identifier": "wasde"}
     assert sent_urls(route) == [f"{WASDE_RELEASES}?page=0"]
 
@@ -279,6 +281,7 @@ def test_list_release_files(replay_fixture: ReplayFixture) -> None:
     ]
     assert result.meta.endpoint == "esmis_api_release_findById"
     assert result.meta.vintage == "796099"
+    assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
     assert result.meta.request == {"release_id": 796099}
     assert sent_urls(route) == [f"{API}/release/findById/796099"]
 
@@ -317,7 +320,7 @@ def test_download_release_file(replay_fixture: ReplayFixture, tmp_path: Path) ->
     assert result.data.last_modified == "Fri, 09 Oct 2026 16:01:00 GMT"
     assert result.meta.endpoint == "wasde1026.txt", "the file's name as upstream prints it"
     assert result.meta.vintage == "796099"
-    assert result.meta.published_at is None
+    assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
     assert result.meta.request == {"release_id": 796099, "format": "txt", "url": WASDE_TXT}
     assert result.meta.retrieved_at == result.data.retrieved_at
     assert_time_between(result.meta.retrieved_at, before, after)
@@ -394,7 +397,11 @@ MCP_CASES: list[McpCase] = [
         {"release_id": 796099},
         [("release_find_by_id", "796099")],
         [f"{API}/release/findById/796099"],
-        lambda payload: payload["meta"]["vintage"] == "796099",
+        lambda payload: (
+            payload["meta"]["vintage"] == "796099"
+            and payload["meta"]["published_at"] == "2026-10-09T12:00:00"
+            and payload["meta"]["published_at_naive"] is True
+        ),
     ),
     (
         "get_latest_release",

@@ -27,7 +27,8 @@ from xippios.usda.esmis import download_release_file, get_latest_release, list_r
 latest = get_latest_release("wasde")  # the newest WASDE release
 latest.data.id, latest.data.release_datetime  # "796099", 2026-10-09 12:00:00+00:00, as printed
 latest.meta.vintage  # "796099": the release id
-latest.meta.published_at  # None at this core pin (see CLAUDE.md, release times)
+latest.meta.published_at  # 2026-10-09 12:00:00, the printed time without its +0000
+latest.meta.published_at_naive  # True: upstream's text, no zone attached (ADR-0022)
 
 files = list_release_files(int(latest.data.id))
 [file.format for file in files.data]  # ["pdf", "txt", "xls", "xml"]
@@ -139,8 +140,9 @@ for names and parameters; the live API answers differently in these points:
   `Last-Modified: Fri, 09 Oct 2026 16:01:00 GMT`, 12:01 Eastern. The `+0000`/`Z` label
   is contradicted by upstream's own calendar and file timestamps, which fit a noon
   Eastern wall-clock time (the recorded download of `wasde1026.txt` answers the same
-  `Last-Modified`); the tasks keep `release_datetime` as printed and leave
-  `meta.published_at` empty at the current core pin (ADR-0022; CLAUDE.md, release times);
+  `Last-Modified`); the tasks keep `release_datetime` as printed, and those about one
+  release put its wall-clock time, the `+0000` dropped, into `meta.published_at` with
+  `published_at_naive` set (ADR-0022; CLAUDE.md, release times);
 - the release calendar page (`docs/upstream/pages/release-calendar.md`) held 3776
   events, drawn from a `publication_upcoming_releases` field (each event's
   `startField`), while the API's `Publication.upcoming_releases` lists 67 upcoming

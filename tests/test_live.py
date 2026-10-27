@@ -89,7 +89,8 @@ async def test_get_release_live() -> None:
     assert result.data.id == str(OCTOBER_2026_WASDE)
     assert result.data.files
     assert result.meta.vintage == str(OCTOBER_2026_WASDE)
-    assert result.meta.published_at is None
+    assert result.meta.published_at == result.data.release_datetime.replace(tzinfo=None)
+    assert result.meta.published_at_naive
 
 
 async def test_get_latest_release_live() -> None:
