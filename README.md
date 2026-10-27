@@ -42,6 +42,21 @@ txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 `search_publications("wasde")` finds a publication's identifiers, and
 `list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, newest first.
 
+`list_publications()` answers from the table of 2522 publications packaged with this
+version, fetched on 2026-10-27, without a request:
+
+```python
+from xippios.usda.esmis import list_publications
+
+wheat = list_publications(search="wheat")  # id, identifier or title contains "wheat": 30
+ers = list_publications(agency_acronym="ERS")  # as list_agencies() spells it: 121
+ers.meta.retrieved_at  # 2026-10-27 17:24:48+00:00, when the table was fetched
+ers.meta.endpoint  # "esmis_api_publication_findAll", the operation it came from
+```
+
+An acronym the packaged agency table lacks raises `UnknownCode`, an
+`InvalidRequestError` naming the closest (`"ers"`: did you mean `ERS`?).
+
 ## MCP
 
 ```json
@@ -55,7 +70,10 @@ txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 ```
 
 Tools are read-only and named `usda_esmis_<verb>_<noun>`. Results are capped, at
-200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest.
+200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest;
+`usda_esmis_list_publications` keeps the default and says how to filter: unfiltered, its
+packaged table is about 600 KB, so the tool returns its first 200 rows, while
+`list_publications()` in Python and its HTTP route return the whole table.
 `download_release_file` is no tool and no route: a bulk task, Python only (ADR-0019).
 `--http` serves streamable HTTP instead of stdio.
 
@@ -70,6 +88,7 @@ exactly tasks.__all__ and tasks_write.__all__. -->
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
 | `esmis_api_agency_findAll` | `list_agencies()` | `usda_esmis_list_agencies` | alpha |
+| `esmis_api_publication_findAll`, every page, packaged (fetched 2026-10-27; no request) | `list_publications(search=None, agency_acronym=None)` | `usda_esmis_list_publications` | alpha |
 | `esmis_api_publication_search`, every page unless `page` is given | `search_publications(query, page=None)` | `usda_esmis_search_publications` | alpha |
 | `esmis_api_publication_findByIdentifier` | `get_publication(publication_identifier)` | `usda_esmis_get_publication` | alpha |
 | `esmis_api_release_findByIdentifier`, pages walked newest first unless `page` is given | `list_releases(publication_identifier, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |

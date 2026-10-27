@@ -77,7 +77,8 @@ wrapper from memory of the API.
   with the offset dropped (`.replace(tzinfo=None)`, the printed wall-clock time, never
   converted) and `published_at_naive=True` (ADR-0022, rule 2); the list tasks leave it
   empty. `meta.vintage` is the release id.
-- **Tasks.** Eight, the contract of `xippios-usda-wasde` (ADR-0021). A paged task given
+- **Tasks.** Nine: eight are the contract of `xippios-usda-wasde` (ADR-0021), and
+  `list_publications` answers from the packaged table (next item). A paged task given
   `page` returns that page; without it, `tasks._Pages` walks the pages from 0 with core's
   `paginate_offset` (`page = offset // 25`), bounded by the last answer's
   `pager.total_pages`, an empty or a short page, and, for `list_releases`, the first
@@ -85,11 +86,34 @@ wrapper from memory of the API.
   `current_page`. `list_releases` filters `since` and `until` on the printed date of
   `release_datetime`, never converted, and its `meta.total` is upstream's count before
   that filter. `get_latest_release` takes the latest `release_datetime` of page 0,
-  never the highest id. `meta.request` omits what the caller left `None`. `MCP_CAPS` is
-  empty, and the default cap (200 rows or 64 KB) can cut two tools called without
-  `page`: `list_releases` (703 rows for WASDE) and a broad `search_publications` (about
-  1.8 KB a publication, so after some 36 matches). Their docstrings tell an agent to
-  page, `list_releases`'s also to bound the call with `since` and `until`.
+  never the highest id. `meta.request` omits what the caller left `None`. Every tool keeps
+  the default cap (200 rows or 64 KB); `MCP_CAPS` gives `list_publications` a note of its
+  own (next item). The default can cut two tools called without `page`: `list_releases`
+  (703 rows for WASDE) and a broad `search_publications` (about 1.8 KB a publication, so
+  after some 36 matches). Their docstrings tell an agent to page, `list_releases`'s also
+  to bound the call with `since` and `until`.
+- **The packaged tables.** `reference/publication.json` (2522 publications, each the
+  eight columns of `PublicationRow`, a projection of `Publication`) and
+  `reference/agency.json` (9 agencies, every field) are `PackagedList` files, written by
+  `scripts/refresh_reference.py` with `PackagedList.write`, never by hand; `fetched` is
+  the UTC time of each table's first request. `list_publications` answers from them
+  without a request, `meta` from `PackagedList.meta` (`retrieved_at` the table's
+  `fetched`, `endpoint` `esmis_api_publication_findAll`, ADR-0022), and refuses an
+  `agency_acronym` the agency table lacks with core's `UnknownCode`; `list_agencies`
+  stays live. Decided by Johannes on 2026-10-27: its MCP tool keeps the default cap, 200
+  rows or 64 KB, with a note naming `search` and `agency_acronym` and that Python and
+  HTTP callers get the whole table; unfiltered the result is 599,402 bytes of compact
+  JSON, about 150k tokens, so an agent filters it, as with sdk-comtrade's HS list, and is
+  never served it whole (ADR-0016). No enum is generated from the tables (`enums.py`
+  holds none, the document's enums are hand-written in `models.py`) and
+  `params.PACKAGED_LISTS` stays empty. The template's `/refresh-reference-data` command
+  still describes value lists and their renderers; `scripts/refresh_reference.py`'s
+  docstring is the recipe for this package until the template adoption. The refresh
+  budget: 102 keyless requests (the agencies, then
+  `/publication/findAll` pages 0 to 100, bounded by `total_pages`) at 30 a minute, about
+  four minutes, run once, in a refresh PR of its own before each release (Workflow
+  rules); the script refuses to write a walk whose pages disagree. The nightly live
+  tests compare the agency table with upstream and the publication count within a page.
 - **A catalog, never a parser** (ADR-0020). This package lists publications, releases
   and their files, and downloads a file; it never parses one. Parser packages such as
   `xippios-usda-wasde` depend on its tasks and models, never on `api/` or `_client`
@@ -104,8 +128,8 @@ wrapper from memory of the API.
 - **Core.** The package depends on `xippios-core` 0.3.0 from PyPI (`core_version`
   0.3.0, `~=0.3.0`; template v0.2.2), which carries ADR-0019's `download` and
   `BULK_TASKS` skip and ADR-0022's `published_at_naive`. The adoption of template v0.3.0
-  follows as a PR of its own (conventions §15); until then `BULK_TASKS` and the
-  `render_enums` call in `scripts/refresh_reference.py` are written by hand.
+  follows as a PR of its own (conventions §15); until then `BULK_TASKS` is written by
+  hand.
 
 ## Read first, in this order
 
@@ -143,12 +167,17 @@ src/xippios/usda/esmis/
                    register, MCP_CAPS any per-tool result caps
   mcp.py           xippios-usda-esmis-mcp entry point
   http.py          FastAPI router
-  params.py        packaged value lists: PACKAGED_LISTS, packaged_values()
-  enums.py         StrEnums (IntEnums for integer ids) generated from the packaged lists;
-                   never edited by hand
-  reference/       packaged code lists (CSV/JSON) plus README with provenance
+  params.py        packaged value lists: PACKAGED_LISTS, packaged_values(); empty here,
+                   the packaged tables are PackagedList files tasks.py reads
+  enums.py         no enum: no packaged value list, nothing generated; the document's
+                   enums are in models.py; a value list packaged later renders here
+                   through core's render_enums
+  reference/       publication.json and agency.json, PackagedList files, plus README with
+                   provenance
 scripts/
-  refresh_reference.py   fetches the packaged lists through api/ and regenerates enums.py
+  refresh_reference.py   fetches agency/findAll and every page of publication/findAll
+                         through api/ and writes reference/agency.json and
+                         reference/publication.json with PackagedList.write (102 requests)
 tests/
   conftest.py      enables xippios.core.testing.plugin, which keeps the run offline
   fixtures/        recorded responses, <endpoint>/<case>.json, never hand-written
@@ -159,7 +188,8 @@ tests/
   test_tasks.py    per-task replay tests, every tool called through the MCP server, the
                    bulk task's absence from the server and the router
   test_live.py     @pytest.mark.live smoke tests, one per task, the release-order check,
-                   the current WASDE .txt downloaded into a temporary directory
+                   the packaged agency table against upstream, the current WASDE .txt
+                   downloaded into a temporary directory
 docs/upstream/     documentation snapshot and FETCHED.md
 .github/workflows/ ci.yml (the required ci check, with the CHANGELOG and fixture-size steps),
                    publish.yml (the release train: tag, build, PyPI), live.yml (nightly live

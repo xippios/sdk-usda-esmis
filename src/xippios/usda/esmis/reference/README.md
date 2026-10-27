@@ -1,31 +1,51 @@
 # Reference data for USDA ESMIS
 
-Code lists and calendars the upstream publishes (commodities, countries, report
-schedules) ship here as CSV or JSON, versioned with the package, and load through
-`xippios.core.reference`:
+Two tables of the ESMIS catalog ship here as packaged lists, versioned with the package,
+each the records of one upstream operation as `scripts/refresh_reference.py` fetched
+them, in the file shape of core's `PackagedList` (`param`, `endpoint`, `fetched`, `note`,
+`records`; conventions §3, ADR-0022):
+
+- `publication.json`: every publication `esmis_api_publication_findAll` lists, a walk of
+  all its pages, each record the eight columns of `models.PublicationRow` (`id`,
+  `identifier`, `title`, `agency_acronym`, `publication_agency_export_1`, `frequency`,
+  `status`, `resource_type`), a projection of `Publication`; `list_publications` answers
+  from it.
+- `agency.json`: every agency `esmis_api_agency_findAll` lists, every field of `Agency`;
+  `list_publications` checks its `agency_acronym` against it. `list_agencies` stays
+  live: it asks upstream.
+
+They load through `xippios.core.PackagedList`, which also builds the answer's `meta`
+(`retrieved_at` the file's `fetched`, `endpoint` the operationId):
 
 ```python
-from xippios.core import load_table
+from xippios.core import PackagedList
 
-rows = load_table("xippios.usda.esmis", "commodities.csv", Commodity)
+from xippios.usda.esmis.models import PublicationRow
+
+table = PackagedList.load("xippios.usda.esmis", "publication")
+rows = table.parse(PublicationRow, source="usda-esmis")
 ```
 
 Rules:
 
 - Files come from the upstream through `scripts/refresh_reference.py`
-  (`/refresh-reference-data`), never typed in by hand; the script also regenerates
-  `enums.py` with one `xippios.core.reference.render_enums` call: one `StrEnum` per
-  value list, one `IntEnum` per list of integer ids.
-- Files keep upstream's names: a table its column names, a list of integer ids its
-  records under upstream's field names.
-- Every file has a row below naming the endpoint or URL it came from and the date.
-- Agents get a lookup task for every packaged list so they can form valid calls: one
-  lookup task per list, `list_<thing>`, served as the MCP tool
-  `usda_esmis_list_<thing>`, or the upstream's own lookup operation when it serves
-  every list through one; `/refresh-reference-data` adds the task where it is missing.
+  (`/refresh-reference-data`), written with `PackagedList.write`, never typed in by hand.
+  The template's script also regenerates `enums.py` with one
+  `xippios.core.reference.render_enums` call; this package generates no enum from them
+  (0.1.0): the three enumerations of `Publication` (`Status`, `Subscribable`,
+  `ResourceType`) are the OpenAPI document's, hand-written in `models.py`, and neither
+  table is a value list.
+- Files keep upstream's names: records under upstream's field names
+  (`UpstreamModel.dump_upstream`), a field upstream leaves out as `null`.
+- Every file has a row below naming the endpoint it came from and the UTC time of its
+  first request; the script rewrites the rows.
+- Agents get a lookup task for every packaged list so they can form valid calls:
+  `list_publications` (`usda_esmis_list_publications`) for the publications, and
+  `list_agencies` (`usda_esmis_list_agencies`), which asks upstream, for the agencies.
 - A multi-tenant source packages no tenant data (ADR-0014), only lists that are the same
-  for every tenant, if any.
+  for every tenant; ESMIS has no tenants.
 
 | File | Origin | Fetched |
 | --- | --- | --- |
-| (none yet) | | |
+| `agency.json` | `esmis_api_agency_findAll`, `GET /api/v1/agency/findAll`, one request (9 records) | 2026-10-27T17:24:45Z |
+| `publication.json` | `esmis_api_publication_findAll`, `GET /api/v1/publication/findAll`, every page, 0 to 100 (2522 records) | 2026-10-27T17:24:48Z |

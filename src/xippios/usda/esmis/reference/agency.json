@@ -1,0 +1,98 @@
+{
+  "param": "agency",
+  "endpoint": "esmis_api_agency_findAll",
+  "fetched": "2026-10-27T17:24:45Z",
+  "note": "Every agency GET /api/v1/agency/findAll answered, one request, 9 agencies in upstream order, every field of Agency.",
+  "records": [
+    {
+      "id": "1",
+      "title": "Foreign Agricultural Service",
+      "acronym": "FAS",
+      "contact_email": "fas@fas.usda.gov",
+      "contact_phone": "",
+      "location_city": "Washington",
+      "location_state": "DC",
+      "homepage_url": "http://www.fas.usda.gov/"
+    },
+    {
+      "id": "2",
+      "title": "Economic Research Service",
+      "acronym": "ERS",
+      "contact_email": "ers@usda.gov",
+      "contact_phone": "202-694-5139",
+      "location_city": "Washington",
+      "location_state": "DC",
+      "homepage_url": "http://www.ers.usda.gov/"
+    },
+    {
+      "id": "3",
+      "title": "World Agricultural Outlook Board",
+      "acronym": "WAOB",
+      "contact_email": "oce@oce.usda.gov",
+      "contact_phone": "202-720-5447",
+      "location_city": "Washington",
+      "location_state": "DC",
+      "homepage_url": "http://www.usda.gov/oce/commodity/"
+    },
+    {
+      "id": "4",
+      "title": "National Agricultural Statistics Service",
+      "acronym": "NASS",
+      "contact_email": "nass@nass.usda.gov",
+      "contact_phone": "800-727-9540",
+      "location_city": "Washington",
+      "location_state": "DC",
+      "homepage_url": "http://www.nass.usda.gov/"
+    },
+    {
+      "id": "5",
+      "title": "Agricultural Marketing Service",
+      "acronym": "AMS",
+      "contact_email": "ams@ams.usda.gov",
+      "contact_phone": "202-720-8998",
+      "location_city": "Washington",
+      "location_state": "DC",
+      "homepage_url": "http://www.ams.usda.gov/"
+    },
+    {
+      "id": "6",
+      "title": "Cotton and Tobacco Program",
+      "acronym": "AMS-CT",
+      "contact_email": "darryl.earnest@ams.usda.gov",
+      "contact_phone": "202-720-2145",
+      "location_city": "",
+      "location_state": "",
+      "homepage_url": "https://www.ams.usda.gov/about-ams/programs-offices/cotton-tobacco"
+    },
+    {
+      "id": "7",
+      "title": "Dairy Program",
+      "acronym": "AMS-DA",
+      "contact_email": "dana.coale@ams.usda.gov",
+      "contact_phone": "202-720-4392",
+      "location_city": "",
+      "location_state": "",
+      "homepage_url": "https://www.ams.usda.gov/about-ams/programs-offices/dairy-program"
+    },
+    {
+      "id": "8",
+      "title": "Specialty Crops Program",
+      "acronym": "AMS-SC",
+      "contact_email": "Christopher.Purdy@usda.gov",
+      "contact_phone": "202-720-3209",
+      "location_city": "Washington",
+      "location_state": "D.C.",
+      "homepage_url": "https://www.ams.usda.gov/market-news/fruits-vegetables"
+    },
+    {
+      "id": "9",
+      "title": "Livestock, Poultry and Seed Program",
+      "acronym": "AMS-LPS",
+      "contact_email": "AskLPS@ams.usda.gov",
+      "contact_phone": "202-720-5705",
+      "location_city": "",
+      "location_state": "",
+      "homepage_url": "https://www.ams.usda.gov/about-ams/programs-offices/livestock-poultry-seed-program"
+    }
+  ]
+}
