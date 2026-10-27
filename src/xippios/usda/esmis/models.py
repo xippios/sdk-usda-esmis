@@ -21,8 +21,10 @@ which wins where it differs from the document (README, "Where the live API devia
 its OpenAPI document"): every ``id`` is a JSON string, several of the document's strings
 are arrays, and the list answers carry keys the document does not name. Each model's
 docstring names the fixtures its shape comes from, all recorded on 2026-10-27.
-``ReleaseFile`` is the one model the document does not name: an item of
-``Release.files`` with the name and extension its URL prints, for the file tasks.
+``ReleaseFile`` and ``PublicationRow`` are the models the document does not name:
+an item of ``Release.files`` with the name and extension its URL prints, for the file
+tasks, and a projection of ``Publication`` (``UpstreamModel.project``, conventions §3),
+the rows of the packaged publication table that ``list_publications`` answers from.
 
 Every model keeps ``UpstreamModel``'s ``extra="ignore"``: a key upstream sends that a
 model does not name is dropped when parsed, never refused. That is how
@@ -48,6 +50,7 @@ __all__ = [
     "Pager",
     "Publication",
     "PublicationResults",
+    "PublicationRow",
     "Release",
     "ReleaseFile",
     "ReleaseResults",
@@ -224,6 +227,43 @@ class Publication(UpstreamModel):
     upcoming_releases: list[AwareDatetime]
     agency_acronym: list[str] | None = None
     publication_agency_export_1: list[str] | None = None
+
+
+class PublicationRow(UpstreamModel):
+    """One publication as the packaged table keeps it: a projection of ``Publication``.
+
+    Eight of ``Publication``'s fields under upstream's names, built with
+    ``UpstreamModel.project`` and nothing renamed or computed (conventions §3): the
+    records of ``reference/publication.json``, which ``scripts/refresh_reference.py``
+    writes from a walk of every page of ``esmis_api_publication_findAll`` and
+    ``list_publications`` answers from. ``agency_acronym`` and
+    ``publication_agency_export_1`` are kept side by side as upstream prints them, neither
+    merged into the other, ``None`` where upstream leaves one out; the packaged file
+    writes that ``None`` as JSON ``null``, so both keys are on every record.
+
+    Attributes:
+        id: ``id``, a string of digits, e.g. ``"1659"``.
+        identifier: ``identifier``, one or more, e.g. ``["wasde"]``; what
+            ``get_publication``, ``list_releases`` and ``get_latest_release`` take.
+        title: ``title``, e.g. ``"World Agricultural Supply and Demand Estimates"``.
+        agency_acronym: ``agency_acronym``, e.g. ``["WAOB"]``, ``["AMS", "AMS-DA"]``;
+            ``None`` where upstream leaves it out.
+        publication_agency_export_1: ``publication_agency_export_1``, e.g. ``["WAOB"]``;
+            ``None`` where upstream leaves it out.
+        frequency: ``frequency``, text, e.g. ``"Monthly"``, ``"Weekly"``.
+        status: ``status``, a ``Status``, e.g. ``Status.ACTIVE`` (``"Active"``).
+        resource_type: ``resource_type``, a ``ResourceType``, e.g.
+            ``ResourceType.REPORT`` (``"Report"``).
+    """
+
+    id: str
+    identifier: list[str]
+    title: str
+    agency_acronym: list[str] | None
+    publication_agency_export_1: list[str] | None
+    frequency: str
+    status: Status
+    resource_type: ResourceType
 
 
 class Release(UpstreamModel):
