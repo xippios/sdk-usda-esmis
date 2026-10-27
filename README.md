@@ -20,13 +20,26 @@ No API key is needed.
 ## 30-second example
 
 ```python
-from xippios.usda.esmis import tasks
+from pathlib import Path
 
-# result = tasks.<task>(...)
-# result.data, result.meta.retrieved_at, result.meta.request
+from xippios.usda.esmis import download_release_file, get_latest_release, list_release_files
+
+latest = get_latest_release("wasde")  # the newest WASDE release
+latest.data.id, latest.data.release_datetime  # "796099", 2026-10-09 12:00:00+00:00, as printed
+latest.meta.vintage  # "796099": the release id
+latest.meta.published_at  # None at this core pin (see CLAUDE.md, release times)
+
+files = list_release_files(int(latest.data.id))
+[file.format for file in files.data]  # ["pdf", "txt", "xls", "xml"]
+
+# Python only, no MCP tool: streams the TXT to the path you name; nothing is cached
+txt = download_release_file(796099, "txt", Path("wasde1026.txt"))
+txt.data.path, txt.data.bytes, txt.data.content_type  # wasde1026.txt, 122378, "text/plain"
+txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 ```
 
-Task functions are listed in the status table below as they are added.
+`search_publications("wasde")` finds a publication's identifiers, and
+`list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, newest first.
 
 ## MCP
 
@@ -42,6 +55,7 @@ Task functions are listed in the status table below as they are added.
 
 Tools are read-only and named `usda_esmis_<verb>_<noun>`. Results are capped, at
 200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest.
+`download_release_file` is no tool and no route: a bulk task, Python only (ADR-0019).
 `--http` serves streamable HTTP instead of stdio.
 
 ## Status
@@ -54,7 +68,14 @@ exactly tasks.__all__ and tasks_write.__all__. -->
 
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
-| (none yet) | | | |
+| `esmis_api_agency_findAll` | `list_agencies()` | `usda_esmis_list_agencies` | alpha |
+| `esmis_api_publication_search`, every page unless `page` is given | `search_publications(query, page=None)` | `usda_esmis_search_publications` | alpha |
+| `esmis_api_publication_findByIdentifier` | `get_publication(publication_identifier)` | `usda_esmis_get_publication` | alpha |
+| `esmis_api_release_findByIdentifier`, pages walked newest first unless `page` is given | `list_releases(publication_identifier, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |
+| `esmis_api_release_findById` | `get_release(release_id)` | `usda_esmis_get_release` | alpha |
+| `esmis_api_release_findByIdentifier`, page 0 | `get_latest_release(publication_identifier)` | `usda_esmis_get_latest_release` | alpha |
+| `esmis_api_release_findById` | `list_release_files(release_id)` | `usda_esmis_list_release_files` | alpha |
+| `esmis_api_release_findById`, then the file | `download_release_file(release_id, format, dest)`, a bulk task | none, Python only | alpha |
 
 ## Where the live API deviates from its OpenAPI document (probed 2026-10-27)
 
