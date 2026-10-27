@@ -21,3 +21,16 @@ All notable changes to this project are documented here. The format follows
 - Attribution: the README and `docs/upstream/FETCHED.md` state that the ESMIS
   documentation and release files are works of the United States Government, in the
   public domain in the United States (17 U.S.C. § 105), and cite USDA's policy page.
+
+### Changed
+
+- `xippios-core` 0.3.0 from PyPI (`core_version` 0.3.0, `~=0.3.0`; template v0.2.2),
+  which brings the api.data.gov gateway module (C14, unused by this keyless source),
+  `AsyncClient.download` for bulk files (C15, ADR-0019) and ADR-0022's
+  `ResultMeta.published_at_naive`, which the release tasks need. Until core released
+  0.3.0 on 2026-10-27, this branch carried a git pin to sdk-core `main` (`787b60c`,
+  then `cb8ecdf`) by the pin rule of the family roadmap §3; the pin is gone. The
+  adoption of template v0.3.0 follows as a PR of its own.
+- `scripts/refresh_reference.py` calls core's `render_enums`, since core 0.3.0 removed
+  `render_str_enums` and `render_int_enums`: a hand-port ahead of template v0.3.0, which
+  renders it. `enums.py` is not regenerated here.

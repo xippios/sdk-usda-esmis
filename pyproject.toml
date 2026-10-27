@@ -18,13 +18,13 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "xippios-core~=0.2.1",
+  "xippios-core~=0.3.0",
 ]
 
 [project.optional-dependencies]
-mcp = ["xippios-core[mcp]~=0.2.1"]
-http = ["xippios-core[http]~=0.2.1"]
-testing = ["xippios-core[testing]~=0.2.1"]
+mcp = ["xippios-core[mcp]~=0.3.0"]
+http = ["xippios-core[http]~=0.3.0"]
+testing = ["xippios-core[testing]~=0.3.0"]
 
 [project.scripts]
 xippios-usda-esmis-mcp = "xippios.usda.esmis.mcp:run"

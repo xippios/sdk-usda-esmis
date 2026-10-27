@@ -4,12 +4,14 @@ Every list in ``LISTS`` or ``ID_LISTS`` is fetched through the layer-1 wrappers 
 ``api/``, never through a task that might answer from the package, and written to
 ``reference/<name>.json`` with the fetch date, an id list as upstream's records under
 upstream's field names; then ``enums.py`` is regenerated as core renders it, ASCII-only
-and ruff-clean, with no formatting step after it (ADR-0008). A value list in ``LISTS``
-becomes one ``StrEnum`` through ``xippios.core.reference.render_str_enums``; a list of
-integer ids and names in ``ID_LISTS`` becomes one ``IntEnum`` through ``id_name_pairs``
-and ``render_int_enums``, so that a member compares equal to the id in upstream's data
-(conventions §3). Each renderer writes a whole module, so ``enums.py`` holds one kind:
-fill one of the two.
+(ADR-0008). Core 0.3.0's rule wants ``ruff format`` and ``ruff check --fix`` run on the
+render (ADR-0008, amendment 2026-10-27); this script does not run them yet: that step
+comes with template v0.3.0's render of it, or with the reference PR that fills the lists,
+and is moot while no list is packaged. A value list in ``LISTS`` becomes one ``StrEnum``
+and a list of integer ids and names in ``ID_LISTS``, through ``id_name_pairs``, one
+``IntEnum``, so that a member compares equal to the id in upstream's data, both through
+one ``xippios.core.reference.render_enums`` call (conventions §3). ``main`` keeps
+``enums.py`` to one kind, as the template rendered it: fill one of the two.
 
 Only lists that are the same for every caller are packaged; a multi-tenant source
 packages no tenant data (ADR-0014). Run from the repository root, with whatever the list
@@ -30,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from xippios.core import UpstreamModel, sync
-from xippios.core.reference import id_name_pairs, render_int_enums, render_str_enums
+from xippios.core.reference import id_name_pairs, render_enums
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = ROOT / "src/xippios/usda/esmis"
@@ -95,10 +97,11 @@ def render(
     pairs: Mapping[str, Sequence[tuple[int, str]]],
     fetched: str | None,
 ) -> str:
-    """``enums.py`` as core renders it: one ``IntEnum`` per id list, else one ``StrEnum`` each."""
-    if pairs:
-        return render_int_enums(pairs, fetched=fetched, generator=GENERATOR)
-    return render_str_enums(values, fetched=fetched, generator=GENERATOR)
+    """``enums.py`` as core renders it: a ``StrEnum`` per value list, an ``IntEnum`` per id list."""
+    lists: dict[str, Sequence[str] | Sequence[tuple[int, str]]] = {**values, **pairs}
+    # ``fetched`` is None only when no list is packaged: an empty mapping then gives every
+    # list (there is none) its date, so the module names no fetch date, which is true.
+    return render_enums(lists, fetched={} if fetched is None else fetched, generator=GENERATOR)
 
 
 def refresh() -> None:
