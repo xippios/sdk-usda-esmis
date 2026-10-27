@@ -14,8 +14,8 @@ Rules:
 
 - Files come from the upstream through `scripts/refresh_reference.py`
   (`/refresh-reference-data`), never typed in by hand; the script also regenerates
-  `enums.py` with `xippios.core.reference`: one `StrEnum` per value list
-  (`render_str_enums`), or one `IntEnum` per list of integer ids (`render_int_enums`).
+  `enums.py` with one `xippios.core.reference.render_enums` call: one `StrEnum` per
+  value list, one `IntEnum` per list of integer ids.
 - Files keep upstream's names: a table its column names, a list of integer ids its
   records under upstream's field names.
 - Every file has a row below naming the endpoint or URL it came from and the date.
