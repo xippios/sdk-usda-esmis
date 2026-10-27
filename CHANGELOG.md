@@ -6,12 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-27
+
 ### Added
 
 - Scaffold from [sdk-template](https://github.com/xippios/sdk-template): configured
-  client for USDA ESMIS, empty task layer, MCP server and FastAPI router
-  wired to it, test harness with core's family check, CI, the nightly live tests and
-  the release train, in which a release PR's merge tags and publishes.
+  client for USDA ESMIS, MCP server and FastAPI router wired to the task layer, test
+  harness with core's family check, CI, the nightly live tests and the release train,
+  in which a release PR's merge tags and publishes.
 - Upstream documentation snapshot in `docs/upstream/`, fetched 2026-10-27, and its
   capture script `scripts/refresh_upstream.py`: the ESMIS OpenAPI document verbatim,
   the WASDE publication page and its newest release's page as Markdown, and an excerpt
@@ -25,11 +27,11 @@ All notable changes to this project are documented here. The format follows
   publications, releases) under `xippios.usda.esmis.api`, the models `Agency`, `Pager`,
   `Publication`, `Release`, `PublicationResults` and `ReleaseResults` typed as the wire
   sends them, with the `StrEnum`s `Status`, `Subscribable` and `ResourceType` that a walk
-  of every publication page confirmed, and the client's `classify`: an unknown id, which the four lookups by id
-  answer with HTTP 404, is `NotFoundError`, and an identifier carrying `/`, which ESMIS
-  refuses, `InvalidRequestError`; the lookups by acronym or identifier answer an unknown
-  one with an empty HTTP 200, returned as such. Recorded fixtures
-  and replay tests in `tests/test_api.py`; CLAUDE.md gains the ESMIS specifics.
+  of every publication page confirmed, and the client's `classify`: an unknown id, which
+  the four lookups by id answer with HTTP 404, is `NotFoundError`, and an identifier
+  carrying `/`, which ESMIS refuses, `InvalidRequestError`; the lookups by acronym or
+  identifier answer an unknown one with an empty HTTP 200, returned as such. Recorded
+  fixtures and replay tests in `tests/test_api.py`; CLAUDE.md gains the ESMIS specifics.
 - Seven catalog tasks, each an MCP tool and an HTTP route: `list_agencies`,
   `search_publications` and `get_publication`, `list_releases` (newest first, with
   `since`, `until` and `page`), `get_release`, `get_latest_release` and
@@ -66,12 +68,9 @@ All notable changes to this project are documented here. The format follows
 - `xippios-core` 0.3.0 from PyPI (`core_version` 0.3.0, `~=0.3.0`; template v0.2.2),
   which brings the api.data.gov gateway module (C14, unused by this keyless source),
   `AsyncClient.download` for bulk files (C15, ADR-0019) and ADR-0022's
-  `ResultMeta.published_at_naive`, which the release tasks need. Until core released
-  0.3.0 on 2026-10-27, this branch carried a git pin to sdk-core `main` (`787b60c`,
-  then `cb8ecdf`) by the pin rule of the family roadmap §3; the pin is gone. The
-  adoption of template v0.3.0 follows as a PR of its own.
+  `ResultMeta.published_at_naive`, which the release tasks need.
 - `scripts/refresh_reference.py` refreshes the two packaged tables through `api/` (102
   requests: the agencies and the 101 publication pages, bounded by `total_pages`) and
-  rewrites the provenance rows of `reference/README.md`; it generates no `enums.py`, so
-  the scaffold's `--render-only` is gone, and `params.PACKAGED_LISTS` stays empty, since
-  the tables are `PackagedList` files that `tasks.py` reads directly.
+  rewrites the provenance rows of `reference/README.md`; it generates no `enums.py`, and
+  `params.PACKAGED_LISTS` is empty, since the tables are `PackagedList` files that
+  `tasks.py` reads directly.

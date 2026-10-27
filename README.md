@@ -64,7 +64,8 @@ An acronym the packaged agency table lacks raises `UnknownCode`, an
   "mcpServers": {
     "usda-esmis": {
       "command": "uvx",
-      "args": ["--from", "xippios-usda-esmis[mcp]", "xippios-usda-esmis-mcp"]    }
+      "args": ["--from", "xippios-usda-esmis[mcp]", "xippios-usda-esmis-mcp"]
+    }
   }
 }
 ```
