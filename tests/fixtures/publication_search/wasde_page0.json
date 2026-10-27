@@ -1,0 +1,85 @@
+{
+  "recorded_at": "2026-10-27T12:05:12.666446Z",
+  "request": {
+    "body": null,
+    "body_base64": false,
+    "content_type": null,
+    "method": "GET",
+    "url": "https://esmis.nal.usda.gov/api/v1/publication/search?query=wasde&page=0"
+  },
+  "response": {
+    "body": "{\"filters\":[\"query\"],\"pager\":{\"current_page\":0,\"items_per_page\":25,\"total_pages\":1,\"total_results\":7},\"results\":[{\"id\":\"1762\",\"agency\":[\"Economic Research Service\"],\"title\":\"Feed Outlook\",\"contact_email\":\"aaron.ates@usda.gov\",\"keywords\":[\"crop acreage\",\"prices\",\"supply\",\"ethanol\",\"feed grains\"],\"frequency\":\"Monthly\",\"status\":\"Active\",\"subscribable\":\"Yes\",\"resource_type\":\"Report\",\"subject\":[\"Grains and Oilseeds\"],\"description\":\"This publication examines the season-average price, production, supply, use, and trade for feed grains in major exporting and importing countries. The report focuses on corn, but covers sorghum, barley, oats, hay, and wheat as well. Contains future projections production, supply, use, and trade made based on weather conditions and current agricultural and industrial developments. Subscribe to ERS e-mail notification service at https: https:\\/\\/www.ers.usda.gov\\/topics\\/farm-economy\\/commodity-outlook\\/email-notification\\/ to receive timely notification of newsletter availability. Related Data Feed Grains Database https:\\/\\/www.ers.usda.gov\\/data-products\\/feed-grains-database\\/ is a queryable database that contains monthly, quarterly, and annual data on prices, supply, and use of corn and other feed grains. This includes data published in the monthly Feed Outlook.\\nRelated Websites\\n\\nFeed Outlook\\nWASDE\\nGrain Circular\\nCorn and Other Feed Grains Topic Page\\n\\nE-mail Notification: Readers of ERS outlook reports have two ways they can receive an e-mail notice about release of reports and associated data. Receive timely notification (soon after the report is posted on the web) via USDA\\u2019s Economics, Statistics and Market Information System (which is housed at Cornell University\\u2019s Mann Library). Go to http:\\/\\/usda.mannlib.cornell.edu\\/MannUsda\\/aboutEmailService.do and follow the instructions to receive e-mail notices about ERS, Agricultural Marketing Service, National Agricultural Statistics Service, and World Agricultural Outlook Board products. Receive weekly notification (on Friday afternoon) via the ERS website. Go to http:\\/\\/www.ers.usda.gov\\/Updates\\/ and follow the instructions to receive notices about ERS outlook reports, Amber Waves magazine, and other reports and data products on specific topics. ERS also offers RSS (really simple syndication) feeds for all ERS products. Go to https:\\/\\/www.ers.usda.gov\\/rss-info\\/\\u0026nbsp;to get started.\\n\",\"identifier\":[\"Market and Trade Economics Division\\/FDS\",\"FDS\"],\"upcoming_releases\":[],\"publication_agency_export_1\":[\"ERS\"]},{\"id\":\"1831\",\"agency\":[\"Economic Research Service\"],\"title\":\"Wheat Outlook\",\"contact_email\":\"andrew.sowell@usda.gov\",\"keywords\":[\"flour\",\"sales\",\"economic outlook and situation\",\"durum wheat\",\"trade\",\"wheat\"],\"frequency\":\"Monthly\",\"status\":\"Active\",\"subscribable\":\"Yes\",\"resource_type\":\"Report\",\"subject\":[\"Grains and Oilseeds\"],\"description\":\"This monthly report examines the U.S. and global wheat industry. Aggregate U.S. wheat production is reported by season, wheat variety and region. Prices, supply, and stocks are also reported with historical context. Global wheat production, use, stocks, and trade are included as an aggregate and on a country by country basis. Data Tables from the Wheat Yearbook are available in the Wheat Data Topics at https:\\/\\/www.ers.usda.gov\\/data-products\\/wheat-data\\/. They contain the latest data and historical information on the production, use, prices, imports, and exports of wheat.\\nRelated Websites\\n\\nWheat Outlook\\u0026nbsp;\\nWASDE\\nWheat Topics\\n\\nE-mail Notification: Readers of ERS outlook reports have two ways they can receive an e-mail notice about release of reports and associated data. Subscribe to ERS e-mail notification service at https:\\/\\/www.ers.usda.gov\\/topics\\/farm-economy\\/commodity-outlook\\/email-notification\\/ to receive timely notification of newsletter availability.\\nReceive weekly notification (on Friday afternoon) via the ERS website. Go to http:\\/\\/www.ers.usda.gov\\/Updates\\/ and follow the instructions to receive notices about ERS outlook reports, Amber Waves magazine, and other reports and data products on specific topics. ERS also offers RSS (really simple syndication) feeds for all ERS products. Go to https:\\/\\/www.ers.usda.gov\\/rss-info\\/ to get started.\\n\",\"identifier\":[\"WHS\",\"Market and Trade Economics Division\\/WHS\"],\"upcoming_releases\":[],\"publication_agency_export_1\":[\"ERS\"]},{\"id\":\"1154\",\"agency\":[\"Economic Research Service\"],\"title\":\"USDA Agricultural Projections\",\"contact_email\":\"erik.dohlman@usda.gov\",\"keywords\":[\"agriculture\",\"economic situation and outlook\",\"international economics\",\"trade\",\"world markets\"],\"frequency\":\"Annually\",\"status\":\"Active\",\"subscribable\":\"Yes\",\"resource_type\":\"Dataset\",\"subject\":[\"Farm Input and Expenditures\"],\"description\":\"The zip files below contain\\u0026nbsp;both previous and\\u0026nbsp;the most recent USDA Agricultural Projection reports, along with accompanying tables in excel format. These files contain the full report\\u2014with\\u0026nbsp;10-year projections for\\u0026nbsp;long-term supply, use,\\u0026nbsp;and\\u0026nbsp;prices\\u0026nbsp;for major U.S. crops and livestock products\\u2014as well as trade tables for the major commodity exporters and importers. The\\u0026nbsp;reports\\u0026nbsp;also include supporting U.S. and international macroeconomic assumptions and other farm sector indicators,\\u0026nbsp;such as farm income projections. The full report and tables are released each year in mid-February,\\u0026nbsp;based on data available as of the prior year\\u2019s October World Agricultural Supply and Demand Estimates (WASDE) report. After that October WASDE release, a sub-set of tables for the next year\\u2019s projections are released in early November. These \\u201cearly release\\u201d tables now contain new macroeconomic assumptions, and\\u0026nbsp;10-year\\u0026nbsp;U.S. projections for each commodity.\\u0026nbsp;\\n\",\"identifier\":[\"94005\",\"Market and Trade Economics Division\\/94005\"],\"upcoming_releases\":[],\"publication_agency_export_1\":[\"ERS\"]},{\"id\":\"1830\",\"agency\":[\"Economic Research Service\"],\"title\":\"Cotton and Wool Outlook\",\"contact_email\":\"leslie.meyer@usda.gov\",\"keywords\":[\"global trade\",\"exports\",\"acreage\",\"supply\",\"cotton production\"],\"frequency\":\"Monthly\",\"status\":\"Active\",\"subscribable\":\"Yes\",\"resource_type\":\"Report\",\"subject\":[\"Cotton and Cottonseed\"],\"description\":\"Examines the latest USDA cotton projections for the production, supply, demand, and global ending stocks in the United States as well as in major exporters and importers of cotton and wool. Also includes tabular data on raw fiber and textile imports, exports, and prices. Subscribe to ERS e-mail notification service at https:\\/\\/www.ers.usda.gov\\/topics\\/farm-economy\\/commodity-outlook\\/email-notification\\/ to receive timely notification of newsletter availability. Data Tables from the Cotton and Wool Yearbook are available at https:\\/\\/www.ers.usda.gov\\/data-products\\/cotton-wool-and-textile-data\\/cotton-and-wool-yearbook\\/. They contain historical information on production, use, prices, imports, and exports of cotton and wool. Tables containing annual raw-fiber equivalents of U.S. textile trade data are available at https:\\/\\/www.ers.usda.gov\\/data-products\\/cotton-wool-and-textile-data\\/raw-fiber-equivalents-of-us-textile-trade-data\\/ \\nRelated Websites\\n\\nCotton and Wool Outlook\\nWASDE\\nCotton and Wool Topics\\n\\nE-mail Notification: Readers of ERS outlook reports have two ways they can receive an e-mail notice about release of reports and associated data. Receive timely notification (soon after the report is posted on the web) via USDA\\u2019s Economics, Statistics and Market Information System (which is housed at Cornell University\\u2019s Mann Library).Go to http:\\/\\/usda.mannlib.cornell.edu\\/MannUsda\\/aboutEmailService.do and follow the instructions to receive e-mail notices about ERS, Agricultural Marketing Service, National Agricultural Statistics Service, and World Agricultural Outlook Board products. Receive weekly notification (on Friday afternoon) via the ERS website. Go to http:\\/\\/www.ers.usda.gov\\/Updates\\/ and follow the instructions to receive notices about ERS outlook reports, Amber Waves magazine, and other reports and data products on specific topics. ERS also offers RSS (really simple syndication) feeds for all ERS products. Go to https:\\/\\/www.ers.usda.gov\\/rss-info\\/\\u0026nbsp;to get started.\\n\",\"identifier\":[\"Market and Trade Economics Division\\/CWS\",\"CWS\"],\"upcoming_releases\":[],\"publication_agency_export_1\":[\"ERS\"]},{\"id\":\"1763\",\"agency\":[\"Economic Research Service\"],\"title\":\"Rice Outlook\",\"contact_email\":\"nathan.childs@usda.gov\",\"keywords\":[\"trade\",\"rice\",\"economic outlook and situation\",\"international trade\",\"forecasts\",\"prices\"],\"frequency\":\"Monthly\",\"status\":\"Active\",\"subscribable\":\"Yes\",\"resource_type\":\"Report\",\"subject\":[\"Retail and Market Prices\"],\"description\":\"This report examines the yearly domestic supply and consumption of rice and projects its future supply and consumption. International imports and exports are also examined; and global market trends are discussed. Data tables are provided for both domestic supply and use and major international producers and markets. Data Tables from the Rice Yearbook tables are available at the https:\\/\\/www.ers.usda.gov\\/data-products\\/rice-yearbook\\/\\u0026nbsp;and Rice Yearbook Tables Rice Chart gallery at http:\\/\\/www.ers.usda.gov\\/data-products\\/rice-chart-gallery\\/.\\nRelated Websites\\n\\nRice Outlook\\nWASDE\\nRice Topic page\\n\\nE-mail notification: Readers of ERS outlook reports have two ways they can receive an e-mail notice about release of reports and associated data. Receive timely notification (soon after the report is posted on the web) via USDA\\u2019s Economics, Statistics and Market Information System (which is housed at Cornell University\\u2019s Mann Library). Go to http:\\/\\/usda.mannlib.cornell.edu\\/MannUsda\\/aboutEmailService.do and follow the instructions to receive e-mail notices about ERS, Agricultural Marketing Service, National Agricultural Statistics Service, and World Agricultural Outlook Board products. Receive weekly notification (on Friday afternoon) via the ERS website. Go to http:\\/\\/www.ers.usda.gov\\/Updates\\/ and follow the instructions to receive notices about ERS outlook reports, Amber Waves magazine, and other reports and data products on specific topics. ERS also offers RSS (really simple syndication) feeds for all ERS products. Go to https:\\/\\/www.ers.usda.gov\\/rss-info\\/\\u0026nbsp;to get started.\\n\",\"identifier\":[\"Market and Trade Economics Division\\/RCS\",\"RCS\"],\"upcoming_releases\":[],\"publication_agency_export_1\":[\"ERS\"]},{\"id\":\"1646\",\"agency\":[\"Foreign Agricultural Service\"],\"title\":\"World Agricultural Production\",\"contact_email\":\"Press@fas.usda.gov\",\"keywords\":[\"oilseeds\",\"exports\",\"wheat\",\"cotton\",\"imports\",\"rice\",\"coarse grains\"],\"frequency\":\"Monthly\",\"status\":\"Active\",\"subscribable\":\"No\",\"resource_type\":\"Report\",\"subject\":[\"Grains and Oilseeds\",\"Cotton and Cottonseed\"],\"description\":\"Monthly report on crop acreage, yield and production in major countries worldwide. Sources include reporting from FASs worldwide offices, official statistics of foreign governments, and analysis of economic data and satellite imagery. The report reflects official USDA estimates released in the monthly World Agricultural Supply and Demand Estimates (WASDE) report.\\n\",\"identifier\":[\"worldag-production\"],\"upcoming_releases\":[],\"publication_agency_export_1\":[\"FAS\"]},{\"id\":\"1659\",\"agency\":[\"World Agricultural Outlook Board\"],\"title\":\"World Agricultural Supply and Demand Estimates\",\"contact_email\":\"msewadeh@oce.usda.gov\",\"keywords\":[\"dairy\",\"grains\",\"soybeans\",\"sugars\",\"supply\",\"Livestock\"],\"frequency\":\"Monthly\",\"status\":\"Active\",\"subscribable\":\"No\",\"resource_type\":\"Report\",\"subject\":[\"Grains and Oilseeds\",\"Animals and Animal Products\",\"Crops and Crop Products\"],\"description\":\"The World Agricultural Supply and Demand Estimates (WASDE) is prepared and released by the World Agricultural Outlook Board (WAOB). The report is released monthly, and provides annual forecasts for supply and use of U.S. and world wheat, rice, coarse grains, oilseeds, and cotton. The report also covers U.S. supply and use of sugar, meat, poultry eggs and milk, as well as Mexico\\u2019s supply and use of sugar. The WAOB chairs the Interagency Commodity Estimates Committees (ICECs), which include analysts from key USDA agencies who compile and interpret information from USDA and other domestic and foreign sources to produce the report. For more information about the WASDE process and data, visit the\\u0026nbsp;WASDE Report page.\\n\",\"identifier\":[\"wasde\"],\"upcoming_releases\":[],\"publication_agency_export_1\":[\"WAOB\"]}],\"sorters\":[],\"system\":{\"page_key\":\"page\"}}",
+    "body_base64": false,
+    "headers": [
+      [
+        "date",
+        "Tue, 27 Oct 2026 12:05:10 GMT"
+      ],
+      [
+        "content-type",
+        "application/json"
+      ],
+      [
+        "server",
+        "Apache"
+      ],
+      [
+        "cache-control",
+        "max-age=3600, public"
+      ],
+      [
+        "x-drupal-dynamic-cache",
+        "MISS"
+      ],
+      [
+        "content-language",
+        "en"
+      ],
+      [
+        "x-content-type-options",
+        "nosniff"
+      ],
+      [
+        "x-frame-options",
+        "SAMEORIGIN"
+      ],
+      [
+        "expires",
+        "Sun, 19 Nov 1978 05:00:00 GMT"
+      ],
+      [
+        "vary",
+        "Cookie"
+      ],
+      [
+        "x-generator",
+        "Drupal 11 (https://www.drupal.org)"
+      ],
+      [
+        "x-drupal-cache",
+        "HIT"
+      ],
+      [
+        "x-backend-server",
+        "1"
+      ],
+      [
+        "last-modified",
+        "Tue, 27 Oct 2026 11:10:35 GMT"
+      ],
+      [
+        "etag",
+        "\"1793099435\""
+      ],
+      [
+        "content-security-policy",
+        "default-src 'self'; child-src 'self' https://platform.twitter.com https://youtube.com; connect-src 'self' https://dap.digitalgov.gov https://*.google.com https://*.googletagmanager.com https://*.google-analytics.com https://orcid.org/userStatus.json https://search.usa.gov https://translate.googleapis.com https://usda.libanswers.com; font-src 'self' data: https://cdn.knightlab.com https://fonts.gstatic.com; frame-src 'self' https://*.twitter.com https://usda.libanswers.com https://player.vimeo.com https://*.youtube.com; img-src 'self' data: https://cdn.knightlab.com https://feed.informer.com https://fonts.gstatic.com https://*.googletagmanager.com https://*.google-analytics.com https://*.nal.usda.gov https://orcid.org https://info.orcid.org https://www.ssa.gov/accessibility/andi/ https://*.twitter.com https://*.usa.gov https://validator.swagger.io https://*.ytimg.com; script-src 'self' https://ajax.googleapis.com https://cdn.knightlab.com https://dap.digitalgov.gov https://feed.informer.com https://*.googletagmanager.com https://*.libanswers.com https://www.nal.usda.gov https://platform.twitter.com https://search.usa.gov https://www.youtube.com; script-src-elem 'self' 'unsafe-inline' https://ajax.googleapis.com https://cdn.knightlab.com https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/ https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/ https://dap.digitalgov.gov https://feed.informer.com https://*.libanswers.com https://www.nal.usda.gov https://search.usa.gov https://*.twitter.com https://unpkg.com/chart.js@4.4.0/ https://unpkg.com/chartjs-adapter-date-fns@3.0.0/ https://unpkg.com/chartjs-plugin-datalabels@2.0.0/ https://*.vimeo.com https://www.googletagmanager.com https://www.youtube.com https://www.ssa.gov/accessibility/andi/; style-src 'self' 'unsafe-inline' https://cdn.knightlab.com https://fonts.googleapis.com https://search.usa.gov; style-src-elem 'self' 'unsafe-inline' https://cdn.knightlab.com https://static-assets-us.libanswers.com https://search.usa.gov https://www.ssa.gov;"
+      ],
+      [
+        "strict-transport-security",
+        "max-age=31536000; includeSubDomains; preload"
+      ]
+    ],
+    "status": 200
+  }
+}
