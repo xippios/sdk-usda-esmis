@@ -18,3 +18,6 @@ All notable changes to this project are documented here. The format follows
   of the release calendar, with `FETCHED.md` recording every fetch.
 - README and CLAUDE.md name ESMIS in full; the README lists where the live API deviates
   from its OpenAPI document, as probed on 2026-10-27.
+- Attribution: the README and `docs/upstream/FETCHED.md` state that the ESMIS
+  documentation and release files are works of the United States Government, in the
+  public domain in the United States (17 U.S.C. § 105), and cite USDA's policy page.

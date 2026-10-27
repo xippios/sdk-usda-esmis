@@ -107,12 +107,13 @@ for names and parameters; the live API answers differently in these points:
 
 ## Upstream terms and attribution
 
-Data comes from USDA ESMIS (https://esmis.nal.usda.gov); this package adds no rights to
-it. The pages the documentation snapshot reads state no terms of use and no copyright
-line (`docs/upstream/FETCHED.md`, Attribution). USDA's Policies and Links page
-(https://www.usda.gov/policies-and-links), to which the site's footer links, answered
-403 to the capture script, so what it states stays unverified. Documentation snapshot:
-`docs/upstream/`.
+Data comes from USDA ESMIS (https://esmis.nal.usda.gov) under its own terms of use;
+this package adds no rights to it. The documentation and the release files are works of
+the United States Government (USDA National Agricultural Library, ESMIS), in the public
+domain in the United States (17 U.S.C. § 105); when redistributing them, credit "Source:
+USDA National Agricultural Library, ESMIS". The pages the snapshot reads print no
+copyright line, and USDA's policy page is cited in `docs/upstream/FETCHED.md`,
+Attribution. Documentation snapshot: `docs/upstream/`.
 
 ## Licence
 
