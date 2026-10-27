@@ -21,6 +21,8 @@ which wins where it differs from the document (README, "Where the live API devia
 its OpenAPI document"): every ``id`` is a JSON string, several of the document's strings
 are arrays, and the list answers carry keys the document does not name. Each model's
 docstring names the fixtures its shape comes from, all recorded on 2026-10-27.
+``ReleaseFile`` is the one model the document does not name: an item of
+``Release.files`` with the name and extension its URL prints, for the file tasks.
 
 Every model keeps ``UpstreamModel``'s ``extra="ignore"``: a key upstream sends that a
 model does not name is dropped when parsed, never refused. That is how
@@ -47,6 +49,7 @@ __all__ = [
     "Publication",
     "PublicationResults",
     "Release",
+    "ReleaseFile",
     "ReleaseResults",
     "ResourceType",
     "Status",
@@ -265,6 +268,29 @@ class Release(UpstreamModel):
     description: str
     equipment_software: str
     temporal_coverage: str
+
+
+class ReleaseFile(UpstreamModel):
+    """One file of a release: an item of ``Release.files``, with its name and format.
+
+    Read from the URL's text alone, as upstream prints it; nothing is fetched, decoded or
+    renamed. The catalog states no size, so none is given: a download reports its bytes.
+    Recorded release files are named ``<name>.<extension>`` with the extensions ``pdf``,
+    ``txt``, ``xls``, ``xml`` and ``zip`` (``tests/fixtures/release_find_all/page0.json``,
+    ``release_find_by_identifier/wasde_page0.json``); a few WASDE releases name a file
+    ``latest.pdf`` or ``wasde0626v2.txt``.
+
+    Attributes:
+        url: The item of ``Release.files`` verbatim, e.g.
+            ``"https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.txt"``.
+        name: The URL path's last segment as printed, e.g. ``"wasde1026.txt"``.
+        format: The name's extension after its last dot, lowercased, e.g. ``"txt"``,
+            ``"pdf"``, ``"xls"``, ``"xml"``, ``"zip"``; ``""`` for a name without one.
+    """
+
+    url: str
+    name: str
+    format: str
 
 
 class PublicationResults(UpstreamModel):
