@@ -247,8 +247,9 @@ class Release(UpstreamModel):
         release_datetime: ``release_datetime``, printed ``YYYY-MM-DDTHH:MM:SS+0000``,
             e.g. ``"2026-10-09T12:00:00+0000"``, parsed into an aware ``datetime`` with
             the offset as printed, ``+00:00``. The offset is upstream's label, and
-            upstream's own calendar and file times contradict it (README); how a task
-            reports it in ``meta`` is the tasks' decision, the model keeps it as printed.
+            upstream's own calendar and file times contradict it (README); the model
+            keeps it as printed, and how the tasks report it in ``meta`` is in
+            ``tasks.py``'s docstring.
         identifier: ``identifier``, the publication's identifiers, e.g. ``["wasde"]``.
         agency_acronym: ``agency_acronym``, one string here, e.g. ``"WAOB"``.
         bibliographic_citation: ``bibliographic_citation``; ``""`` in every recorded
