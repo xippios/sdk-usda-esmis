@@ -1,0 +1,395 @@
+openapi: 3.0.0
+info:
+  title: ESMIS REST API
+  description: |
+    This documentation is for the read-only API endpoints of the ESMIS website.
+  version: 1.0.1
+servers:
+  - url: 'https://esmis.nal.usda.gov'
+    description: Production
+components:
+  examples:
+    agencyAcronym:
+      value: NASS
+  parameters:
+    agencyAcronym:
+      name: agencyAcronym
+      in: path
+      required: true
+      schema:
+        type: string
+      example: NASS
+    agencyId:
+      name: agencyId
+      in: path
+      required: true
+      schema:
+        type: integer
+      example: 4
+    page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 0
+    publicationId:
+      name: publicationId
+      in: path
+      required: true
+      schema:
+        type: integer
+      example: 2179
+    publicationIdentifier:
+      name: publicationIdentifier
+      in: path
+      required: true
+      schema:
+        type: string
+      example: CropProg
+    releaseId:
+      name: releaseId
+      in: path
+      required: true
+      schema:
+        type: integer
+      example: 795266
+  responses:
+    AgencyResults:
+      description: Agency search results
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Agency'
+    PublicationResults:
+      description: Publication search results
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              pager:
+                $ref: '#/components/schemas/Pager'
+              results:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Publication'
+    ReleaseResults:
+      description: Release search results
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              pager:
+                $ref: '#/components/schemas/Pager'
+              results:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Release'
+    ServerError:
+      description: Internal server error.
+  schemas:
+    Agency:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+          example: 4
+        title:
+          type: string
+          example: National Agricultural Statistics Service
+        acronym:
+          type: string
+          example: NASS
+        contact_email:
+          type: string
+          example: nass@nass.usda.gov
+        contact_phone:
+          type: string
+          example: 800-727-9540
+        location_city:
+          type: string
+          example: Washington
+        location_state:
+          type: string
+          example: DC
+        homepage_url:
+          type: string
+          example: https://www.nass.usda.gov/
+    Pager:
+      type: object
+      properties:
+        current_page:
+          type: integer
+          format: int32
+        items_per_page:
+          type: integer
+          format: int32
+          default: 25
+        total_pages:
+          type: integer
+          format: int32
+        total_results:
+          type: integer
+          format: int32
+    Publication:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+          example: 2179
+        agency:
+          type: string
+          example: NASS
+        title:
+          type: string
+          example: Crop Progress
+        contact_email:
+          type: string
+          example: nass@nass.usda.gov
+        keywords:
+          type: array
+          items:
+            type: string
+          example:
+            - production
+            - harvest
+        frequency:
+          type: string
+          enum:
+            - Daily
+            - Bi-weekly
+            - Weekly
+            - Monthly
+            - Annually
+            - Seasonal
+            - Other
+            - Not specified
+        status:
+          type: string
+          enum:
+            - Active
+            - Inactive
+        subscribable:
+          type: string
+          enum:
+            - Yes
+            - No
+        resource_type:
+          type: string
+          enum:
+            - Report
+            - Dataset
+            - Statistical bulletin
+        subject:
+          type: array
+          items:
+            type: string
+          example:
+            - Weather
+        description:
+          type: string
+        identifier:
+          type: string
+          example: CropProg
+        upcoming_releases:
+          type: array
+          items:
+            type: string
+            format: date-time
+        agency_acronym:
+          type: string
+          example: NASS
+    Release:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+          example: 795266
+        files:
+          type: array
+          items:
+            type: string
+          example:
+            - 'https://esmis.nal.usda.gov/sites/default/release-files/8336h188j/2514qk05k/j0991c960/prog3925.pdf'
+        title:
+          type: string
+          example: Crop Progress
+        release_datetime:
+          type: string
+          format: date-time
+        identifier:
+          type: array
+          items:
+            type: string
+          example:
+            - CropProg
+        agency_acronym:
+          type: string
+          example: NASS
+        bibliographic_citation:
+          type: string
+        description:
+          type: string
+        equipment_software:
+          type: string
+        temporal_coverage:
+          type: string
+paths:
+  /api/v1/agency/findAll:
+    get:
+      summary: Finds all agencies
+      description: Returns a list of all agencies.
+      tags:
+        - Agency Endpoints
+      responses:
+        200:
+          $ref: "#/components/responses/AgencyResults"
+      operationId: esmis_api_agency_findAll
+  /api/v1/agency/findByAcronym/{agencyAcronym}:
+    get:
+      summary: Finds agency metadata by acronym
+      description: Search for a single agency's metadata by its acronym.
+      tags:
+        - Agency Endpoints
+      parameters:
+        - $ref: "#/components/parameters/agencyAcronym"
+      responses:
+        200:
+          $ref: "#/components/responses/AgencyResults"
+      operationId: esmis_api_agency_findByAcronym
+  /api/v1/agency/findById/{agencyId}:
+    get:
+      summary: Finds agency metadata by ID
+      description: Search for a single agency's metadata by its ID.
+      tags:
+        - Agency Endpoints
+      parameters:
+        - $ref: "#/components/parameters/agencyId"
+      responses:
+        200:
+          $ref: "#/components/responses/AgencyResults"
+      operationId: esmis_api_agency_findById
+  /api/v1/publication/findAll:
+    get:
+      summary: Finds all publications
+      description: Returns a paginated list of all publications.
+      tags:
+        - Publication Endpoints
+      parameters:
+        - $ref: "#/components/parameters/page"
+      responses:
+        200:
+          $ref: "#/components/responses/PublicationResults"
+      operationId: esmis_api_publication_findAll
+  /api/v1/publication/findByAgency/{agencyAcronym}:
+    get:
+      summary: Search for publications by agency
+      description: Search a paginated list of publications by agency acronym.
+      tags:
+        - Publication Endpoints
+      parameters:
+        - $ref: "#/components/parameters/agencyAcronym"
+        - $ref: "#/components/parameters/page"
+      responses:
+        200:
+          $ref: "#/components/responses/PublicationResults"
+      operationId: esmis_api_publication_findByAgency
+  /api/v1/publication/findById/{publicationId}:
+    get:
+      summary: Search for publications by ID
+      description: Search for a single publication's metadata by its ID.
+      tags:
+        - Publication Endpoints
+      parameters:
+        - $ref: "#/components/parameters/publicationId"
+      responses:
+        200:
+          $ref: "#/components/responses/PublicationResults"
+      operationId: esmis_api_publication_findById
+  /api/v1/publication/findByIdentifier/{publicationIdentifier}:
+    get:
+      summary: Search for publications by identifier
+      description: Search for a single publication's metadata by its identifier.
+      tags:
+        - Publication Endpoints
+      parameters:
+        - $ref: "#/components/parameters/publicationIdentifier"
+      responses:
+        200:
+          $ref: "#/components/responses/PublicationResults"
+      operationId: esmis_api_publication_findByIdentifier
+  /api/v1/publication/search:
+    get:
+      summary: Search for publications by keyword
+      description: Search a paginated list of publications by keyword.
+      tags:
+        - Publication Endpoints
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          example: crops
+      responses:
+        200:
+          $ref: "#/components/responses/PublicationResults"
+      operationId: esmis_api_publication_search
+  /api/v1/release/findAll:
+    get:
+      summary: Finds all releases
+      description: Returns a paginated list of all releases.
+      tags:
+        - Release Endpoints
+      parameters:
+        - $ref: "#/components/parameters/page"
+      responses:
+        200:
+          $ref: "#/components/responses/ReleaseResults"
+      operationId: esmis_api_release_findAll
+  /api/v1/release/findById/{releaseId}:
+    get:
+      summary: Search for releases by ID
+      description: Search for a single release's metadata by its ID.
+      tags:
+        - Release Endpoints
+      parameters:
+        - $ref: "#/components/parameters/releaseId"
+      responses:
+        200:
+          $ref: "#/components/responses/ReleaseResults"
+      operationId: esmis_api_release_findById
+  /api/v1/release/findByIdentifier/{publicationIdentifier}:
+    get:
+      summary: Search for releases by identifier
+      description: Search a paginated list of releases by their publication's identifier.
+      tags:
+        - Release Endpoints
+      parameters:
+        - $ref: "#/components/parameters/publicationIdentifier"
+        - $ref: "#/components/parameters/page"
+      responses:
+        200:
+          $ref: "#/components/responses/ReleaseResults"
+      operationId: esmis_api_release_findByIdentifier
+  /api/v1/release/findByPubId/{publicationId}:
+    get:
+      summary: Search for releases by publication ID
+      description: Search a paginated list of releases by their publication's ID.
+      tags:
+        - Release Endpoints
+      parameters:
+        - $ref: "#/components/parameters/publicationId"
+        - $ref: "#/components/parameters/page"
+      responses:
+        200:
+          $ref: "#/components/responses/ReleaseResults"
+      operationId: esmis_api_release_findByPubId

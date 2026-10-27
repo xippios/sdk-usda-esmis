@@ -1,6 +1,7 @@
 # sdk-usda-esmis — instructions for Claude Code
 
-`xippios-usda-esmis` wraps USDA ESMIS as a typed Python client, an MCP server
+`xippios-usda-esmis` wraps USDA ESMIS, the Economics, Statistics, and Market Information
+System of USDA's National Agricultural Library, as a typed Python client, an MCP server
 and FastAPI routes, built on `xippios-core`. This file is the contract for every session
 that works here; the family rules it points to apply as well.
 
@@ -8,7 +9,7 @@ that works here; the family rules it points to apply as well.
 
 | | |
 | --- | --- |
-| Upstream | USDA ESMIS, https://esmis.nal.usda.gov |
+| Upstream | USDA ESMIS (Economics, Statistics, and Market Information System), https://esmis.nal.usda.gov |
 | API base URL | `https://esmis.nal.usda.gov` |
 | Documentation | https://esmis.nal.usda.gov/api-documentation, snapshotted in `docs/upstream/` |
 | Credentials | none; the API is open |

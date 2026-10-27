@@ -1,7 +1,8 @@
 # xippios-usda-esmis
 
 Typed Python client, MCP server and FastAPI routes for
-[USDA ESMIS](https://esmis.nal.usda.gov), part of the
+[USDA ESMIS](https://esmis.nal.usda.gov), the Economics, Statistics, and Market
+Information System of USDA's National Agricultural Library, part of the
 [xippios SDK family](https://github.com/xippios). Names and semantics follow the
 upstream documentation; every response carries release metadata (source, endpoint,
 retrieved_at, published_at, vintage).
@@ -55,10 +56,63 @@ exactly tasks.__all__ and tasks_write.__all__. -->
 | --- | --- | --- | --- |
 | (none yet) | | | |
 
+## Where the live API deviates from its OpenAPI document (probed 2026-10-27)
+
+The OpenAPI document in `docs/upstream/openapi/esmis_public_api.yaml` is the reference
+for names and parameters; the live API answers differently in these points:
+
+- every `id` is a JSON string, not an integer;
+- `Publication.agency`, `.identifier` and `.agency_acronym` are arrays, not strings;
+- `agency_acronym` is absent on some publications, which carry
+  `publication_agency_export_1` instead;
+- the list wrapper has `filters`, `sorters` and `system` (`{"page_key": "page"}`)
+  beside `pager` and `results`;
+- `/publication/search` without `query` answers 200 with `"pager": []`;
+- `/publication/findById` of an unknown id answers 404 `{"message": ""}`,
+  `/publication/findByIdentifier` of an unknown identifier answers 200 with empty
+  results; the agency and release lookups were not probed;
+- `page` is 0-based and a page holds 25 items, as the YAML's defaults say; undocumented
+  are that the page size is fixed and that a page past the last answers empty results
+  with `current_page` clamped;
+- release lists come newest first by id (descending), undocumented, with
+  `release_datetime` only mostly in that order (`/release/findAll` page 0 runs
+  2026-10-26, 2026-10-09, 2026-10-23); publication lists follow no id order
+  (`/publication/findAll` page 0: ids 2425, 1801, 1861, 1922;
+  `/publication/search?query=wasde`: 1762, 1831, 1154);
+- `release_datetime` is `YYYY-MM-DDTHH:MM:SS+0000` (a zone, no colon);
+- `Release.files` paths take two shapes: recent releases use
+  `/sites/default/release-files/{release id}/{name}.{ext}`
+  (`/sites/default/release-files/796099/wasde1026.txt`), older ones the hashed
+  three-segment path the YAML's example shows
+  (`/sites/default/release-files/8336h188j/2514qk05k/j0991c960/prog3925.pdf`);
+- `Publication.upcoming_releases` was `[]` on every sampled publication, and the YAML
+  lists no release-calendar operation;
+- the zone label of release times: the API prints `release_datetime` with `+0000` and
+  the release page its `datetime` with `Z` (`2026-10-09T12:00:00+0000` and
+  `datetime="2026-10-09T12:00:00Z"` for the October 2026 WASDE), while the release
+  calendar, whose settings say `timeZone: "America/New_York"`, puts the WASDE releases
+  that `/release/findByIdentifier/wasde` (page 0) prints as `2025-09-12T12:00:00+0000`
+  and `2025-12-09T12:00:00+0000` at `2025-09-12T12:00:00-04:00` and
+  `2025-12-09T12:00:00-05:00`, and the October release's own file answers
+  `HEAD /sites/default/release-files/796099/wasde1026.txt` with
+  `Last-Modified: Fri, 09 Oct 2026 16:01:00 GMT`, 12:01 Eastern. The `+0000`/`Z` label
+  is contradicted by upstream's own calendar and file timestamps, which fit a noon
+  Eastern wall-clock time; how `published_at` treats it was decided on 2026-10-27 and
+  lands with the tasks PR (ADR-0022);
+- the release calendar page (`docs/upstream/pages/release-calendar.md`) held 3776
+  events, drawn from a `publication_upcoming_releases` field (each event's
+  `startField`), while the API's `Publication.upcoming_releases` answered `[]` for
+  every sampled publication; every calendar event is classed `fc-event-past`, future
+  ones included, and WASDE's events stop at 2025-12-09.
+
 ## Upstream terms and attribution
 
-Data comes from USDA ESMIS (https://esmis.nal.usda.gov) under its own terms of use;
-this package adds no rights to it. Documentation snapshot: `docs/upstream/`.
+Data comes from USDA ESMIS (https://esmis.nal.usda.gov); this package adds no rights to
+it. The pages the documentation snapshot reads state no terms of use and no copyright
+line (`docs/upstream/FETCHED.md`, Attribution). USDA's Policies and Links page
+(https://www.usda.gov/policies-and-links), to which the site's footer links, answered
+403 to the capture script, so what it states stays unverified. Documentation snapshot:
+`docs/upstream/`.
 
 ## Licence
 
