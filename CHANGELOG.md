@@ -11,9 +11,9 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - Scaffold from [sdk-template](https://github.com/xippios/sdk-template): configured
-  client for USDA ESMIS, empty task layer, MCP server and FastAPI router
-  wired to it, test harness with core's family check, CI, the nightly live tests and
-  the release train, in which a release PR's merge tags and publishes.
+  client for USDA ESMIS, MCP server and FastAPI router wired to the task layer, test
+  harness with core's family check, CI, the nightly live tests and the release train,
+  in which a release PR's merge tags and publishes.
 - Upstream documentation snapshot in `docs/upstream/`, fetched 2026-10-27, and its
   capture script `scripts/refresh_upstream.py`: the ESMIS OpenAPI document verbatim,
   the WASDE publication page and its newest release's page as Markdown, and an excerpt
@@ -27,11 +27,11 @@ All notable changes to this project are documented here. The format follows
   publications, releases) under `xippios.usda.esmis.api`, the models `Agency`, `Pager`,
   `Publication`, `Release`, `PublicationResults` and `ReleaseResults` typed as the wire
   sends them, with the `StrEnum`s `Status`, `Subscribable` and `ResourceType` that a walk
-  of every publication page confirmed, and the client's `classify`: an unknown id, which the four lookups by id
-  answer with HTTP 404, is `NotFoundError`, and an identifier carrying `/`, which ESMIS
-  refuses, `InvalidRequestError`; the lookups by acronym or identifier answer an unknown
-  one with an empty HTTP 200, returned as such. Recorded fixtures
-  and replay tests in `tests/test_api.py`; CLAUDE.md gains the ESMIS specifics.
+  of every publication page confirmed, and the client's `classify`: an unknown id, which
+  the four lookups by id answer with HTTP 404, is `NotFoundError`, and an identifier
+  carrying `/`, which ESMIS refuses, `InvalidRequestError`; the lookups by acronym or
+  identifier answer an unknown one with an empty HTTP 200, returned as such. Recorded
+  fixtures and replay tests in `tests/test_api.py`; CLAUDE.md gains the ESMIS specifics.
 - Seven catalog tasks, each an MCP tool and an HTTP route: `list_agencies`,
   `search_publications` and `get_publication`, `list_releases` (newest first, with
   `since`, `until` and `page`), `get_release`, `get_latest_release` and
