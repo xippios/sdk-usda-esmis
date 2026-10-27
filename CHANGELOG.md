@@ -68,12 +68,9 @@ All notable changes to this project are documented here. The format follows
 - `xippios-core` 0.3.0 from PyPI (`core_version` 0.3.0, `~=0.3.0`; template v0.2.2),
   which brings the api.data.gov gateway module (C14, unused by this keyless source),
   `AsyncClient.download` for bulk files (C15, ADR-0019) and ADR-0022's
-  `ResultMeta.published_at_naive`, which the release tasks need. Until core released
-  0.3.0 on 2026-10-27, this branch carried a git pin to sdk-core `main` (`787b60c`,
-  then `cb8ecdf`) by the pin rule of the family roadmap §3; the pin is gone. The
-  adoption of template v0.3.0 follows as a PR of its own.
+  `ResultMeta.published_at_naive`, which the release tasks need.
 - `scripts/refresh_reference.py` refreshes the two packaged tables through `api/` (102
   requests: the agencies and the 101 publication pages, bounded by `total_pages`) and
-  rewrites the provenance rows of `reference/README.md`; it generates no `enums.py`, so
-  the scaffold's `--render-only` is gone, and `params.PACKAGED_LISTS` stays empty, since
-  the tables are `PackagedList` files that `tasks.py` reads directly.
+  rewrites the provenance rows of `reference/README.md`; it generates no `enums.py`, and
+  `params.PACKAGED_LISTS` is empty, since the tables are `PackagedList` files that
+  `tasks.py` reads directly.
