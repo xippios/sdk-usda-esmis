@@ -214,12 +214,12 @@ async def search_publications_async(
     One request per page of 25 (``esmis_api_publication_search``): ``page`` given returns
     that page, omitted every page. ``"wasde"`` matched 7 publications on 2026-10-27, WASDE
     itself (identifier ``"wasde"``) among them. The MCP tool returns at most 200 rows or
-    64 KB, as few as 36 publications at about 1.8 KB each: page a broad keyword with
-    ``page`` (0, 1, ...) until a page is short. A publication's ``identifier`` values are
-    what ``get_publication``, ``list_releases`` and ``get_latest_release`` take; pass one
-    without ``/``. ``meta.total`` is upstream's count of matches. An empty or blank
-    ``query`` raises ``InvalidRequestError`` before anything is sent: ESMIS requires one
-    and answers an empty one with nothing.
+    64 KB, about 36 publications at about 1.8 KB each (the recorded WASDE matches range
+    0.9-2.5 KB): page a broad keyword with ``page`` (0, 1, ...) until a page is short. A
+    publication's ``identifier`` values are what ``get_publication``, ``list_releases``
+    and ``get_latest_release`` take; pass one without ``/``. ``meta.total`` is upstream's
+    count of matches. An empty or blank ``query`` raises ``InvalidRequestError`` before
+    anything is sent: ESMIS requires one and answers an empty one with nothing.
 
     Args:
         query: The keyword, e.g. ``"wasde"``, ``"crops"``.

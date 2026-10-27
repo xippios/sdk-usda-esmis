@@ -408,7 +408,11 @@ MCP_CASES: list[McpCase] = [
         {"publication_identifier": "wasde"},
         [("release_find_by_identifier", "wasde_page0")],
         [f"{WASDE_RELEASES}?page=0"],
-        lambda payload: payload["data"]["id"] == payload["meta"]["vintage"] == "796099",
+        lambda payload: (
+            payload["data"]["id"] == payload["meta"]["vintage"] == "796099"
+            and payload["meta"]["published_at"] == "2026-10-09T12:00:00"
+            and payload["meta"]["published_at_naive"] is True
+        ),
     ),
     (
         "list_release_files",
@@ -417,6 +421,8 @@ MCP_CASES: list[McpCase] = [
         [f"{API}/release/findById/796099"],
         lambda payload: (
             [file["format"] for file in payload["data"]] == ["pdf", "txt", "xls", "xml"]
+            and payload["meta"]["published_at"] == "2026-10-09T12:00:00"
+            and payload["meta"]["published_at_naive"] is True
         ),
     ),
 ]

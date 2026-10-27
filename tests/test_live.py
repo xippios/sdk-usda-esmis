@@ -98,6 +98,8 @@ async def test_get_latest_release_live() -> None:
     result = await tasks.get_latest_release_async(WASDE)
     assert WASDE in result.data.identifier
     assert result.meta.vintage == result.data.id
+    assert result.meta.published_at == result.data.release_datetime.replace(tzinfo=None)
+    assert result.meta.published_at_naive
     assert result.data.release_datetime.date() <= date.today()
 
 
