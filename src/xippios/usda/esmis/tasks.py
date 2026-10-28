@@ -584,8 +584,8 @@ async def list_recent_releases_async(
     runs 2026-10-26, 2026-10-09, 2026-10-23). ``page`` given returns that page, which
     ``since`` and ``until`` only filter, whatever their dates. ``since`` given without
     ``page`` walks the pages from page 0 and stops after the first page whose newest
-    release is dated more than 14 days before ``since``: 14 days is the largest gap on
-    the operation's two recorded pages, release 796123, dated 2026-10-09, catalogued after
+    release is dated more than 14 days before ``since``: 14 days is the largest gap on the
+    operation's two recorded pages, release 796123, dated 2026-10-09, catalogued after
     four dated 2026-10-23. The walk misses a release catalogued more than 14 days before
     its release time, and one catalogued before a page of older-dated releases; ``page``
     reaches them. The ids follow creation only since ESMIS's migration, whose first WASDE
@@ -593,12 +593,15 @@ async def list_recent_releases_async(
     a ``since`` before 2025-09-12 raises ``InvalidRequestError`` before any request:
     ``list_releases`` lists one publication's releases in release order, and ``page``
     reads older pages. ``since`` and ``until`` keep the releases whose
-    ``release_datetime`` date, as printed, lies between them, both included. Lately a
-    page holds about two weeks of releases (page 1 of 2026-10-28 runs 2026-10-09 back to
-    2026-09-24), fetched at 30 requests a minute, so a ``since`` a month back costs about
-    four requests and one a year back some 26 to 30, about a minute. A call with neither
-    ``since`` nor ``page`` raises ``InvalidRequestError`` before any request: it would
-    walk all 1,542,025 releases on 61,681 pages, as recorded on 2026-10-27, about 34
+    ``release_datetime`` date, as printed, lies between them, both included. At the recent
+    rate, about two weeks of releases a page on the two recorded pages (page 1 of
+    2026-10-28 runs 2026-10-09 back to 2026-09-24), fetched at 30 requests a minute, a
+    ``since`` a month back costs about four requests. The catalog is denser toward the
+    bound: WASDE's new ids run 791996 (2025-09-12) to 795643 (2025-11-14), 3,647 ids in
+    two months, against 456 from there to 796099 (2026-10-09) in the eleven months after,
+    so a ``since`` near 2025-09-12 costs more pages; how many is not probed. A call with
+    neither ``since`` nor ``page`` raises ``InvalidRequestError`` before any request: it
+    would walk all 1,542,025 releases on 61,681 pages, as recorded on 2026-10-27, about 34
     hours; so does ``until`` alone, which bounds nothing of the walk, and a ``since``
     after ``until``. ``meta.total`` is upstream's count of every release, before the date
     filter. ``meta.vintage`` and ``meta.published_at`` stay empty: each release has its
