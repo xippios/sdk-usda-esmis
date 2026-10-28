@@ -570,7 +570,9 @@ def test_the_stop_rule_needs_a_page_newest_more_than_14_days_before_since(
 
 
 def test_the_tolerance_covers_the_order_recorded() -> None:
-    """No recorded release is dated more than 14 days before one catalogued earlier."""
+    """On findAll's two recorded pages, no release is dated more than 14 days before one
+    catalogued earlier; the order beyond them is read from WASDE's recordings (next test).
+    """
     dated = {
         int(release.id): printed_date(release)
         for case in ("page0", "page1")
@@ -589,6 +591,29 @@ def test_the_tolerance_covers_the_order_recorded() -> None:
     assert gaps[796098] == timedelta(days=9)
 
 
+def test_the_bound_is_the_first_wasde_release_of_the_new_ids() -> None:
+    """Below ESMIS's migration the ids do not follow the dates; above it they do.
+
+    WASDE as recorded: the ids jump from 96171 (2025-06-12) to 791996 (2025-09-12); every
+    old id is dated before the bound, and among them a higher id can carry an older date.
+    """
+    wasde = releases_of("wasde_page0") + releases_of("wasde_page1")
+    wasde += recorded(ReleaseResults, "release_find_by_id", "95621").results
+    dated = {int(release.id): printed_date(release) for release in wasde}
+    new = {id_: day for id_, day in dated.items() if id_ >= 791996}
+    old = {id_: day for id_, day in dated.items() if id_ < 791996}
+    assert max(old) == 96171
+    assert min(new) == 791996
+    assert min(new.values()) == new[791996] == tasks.CATALOG_ORDER_SINCE
+    assert max(old.values()) == dated[96169] == date(2025, 8, 12)
+    by_id = [day for _, day in sorted(new.items(), reverse=True)]
+    assert by_id == sorted(by_id, reverse=True), "the new ids follow the dates"
+    assert [dated[id_].month for id_ in range(96165, 96172)] == [5, 4, 3, 2, 8, 7, 6]
+    assert dated[95511] == date(2022, 8, 12)
+    assert dated[95621] == date(2013, 8, 12)
+    assert dated[95482] == date(2025, 1, 10), "a lower id with a later date than both"
+
+
 @pytest.mark.parametrize(
     ("arguments", "message"),
     [
@@ -602,8 +627,25 @@ def test_the_tolerance_covers_the_order_recorded() -> None:
             {"since": date(2026, 10, 24), "until": date(2026, 10, 20), "page": 0},
             "since (2026-10-24) is after until (2026-10-20)",
         ),
+        ({"since": date(2025, 9, 11)}, "since (2025-09-11) is before 2025-09-12"),
+        (
+            {"since": date(2025, 9, 11), "until": date(2025, 9, 30)},
+            "since (2025-09-11) is before 2025-09-12",
+        ),
+        (
+            {"since": date(2025, 9, 11), "until": date(2025, 9, 1)},
+            "since (2025-09-11) is after until (2025-09-01)",
+        ),
     ],
-    ids=["neither", "until-alone", "since-after-until", "since-after-until-with-page"],
+    ids=[
+        "neither",
+        "until-alone",
+        "since-after-until",
+        "since-after-until-with-page",
+        "since-before-the-bound",
+        "since-before-the-bound-with-until",
+        "since-after-until-before-the-bound",
+    ],
 )
 def test_list_recent_releases_refuses_before_any_request(
     respx_mock: respx.MockRouter, arguments: dict[str, Any], message: str
@@ -617,7 +659,22 @@ def test_list_recent_releases_refuses_before_any_request(
         assert "1,542,025 releases on 61,681 pages" in text
         assert "about 34 hours at 30 requests a minute" in text
         assert "pass since (e.g. 2026-10-20) or page" in text
+    if message.endswith("is before 2025-09-12"):
+        assert "use list_releases for one publication's releases in release order" in text
+        assert "pass page to read older pages" in text
     assert respx_mock.calls.call_count == 0, "refused before any request"
+
+
+@pytest.mark.parametrize("since", [date(2025, 9, 12), date(2025, 9, 11)])
+def test_with_page_any_since_only_filters_the_page(
+    replay_fixture: ReplayFixture, since: date
+) -> None:
+    """The bound is the walk's: with ``page`` given, ``since`` filters that page alone."""
+    route = replay_fixture("release_find_all", "page0", match_params=["page"])
+    result = tasks.list_recent_releases(since=since, page=0)
+    assert result.data == recent_of("page0"), "every release of page 0 is dated after since"
+    assert result.meta.request == {"since": since, "page": 0}
+    assert sent_urls(route) == [f"{ALL_RELEASES}?page=0"]
 
 
 @pytest.mark.anyio
@@ -1116,11 +1173,14 @@ async def test_the_list_recent_releases_tool_walks_from_since(
 
 
 @pytest.mark.anyio
-async def test_the_list_recent_releases_tool_refuses_a_call_without_since_or_page(
+async def test_the_list_recent_releases_tool_refuses_without_since_or_page_and_before_the_bound(
     respx_mock: respx.MockRouter,
 ) -> None:
     text = await mcp_call_text(server, "usda_esmis_list_recent_releases", {})
     assert text.startswith("error: InvalidRequestError: pass since or page")
+    old = await mcp_call_text(server, "usda_esmis_list_recent_releases", {"since": "2025-09-11"})
+    assert old.startswith("error: InvalidRequestError: since (2025-09-11) is before 2025-09-12")
+    assert "list_releases" in old
     assert respx_mock.calls.call_count == 0
 
 
