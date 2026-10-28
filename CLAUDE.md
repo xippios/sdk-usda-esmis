@@ -107,9 +107,10 @@ The snapshot in `docs/upstream/` is the reference for names, parameters and sema
   never served it whole (ADR-0016). No enum is generated from the tables (`enums.py`
   holds none, the document's enums are hand-written in `models.py`) and
   `params.PACKAGED_LISTS` stays empty. The template's `/refresh-reference-data` command
-  still describes value lists, named in `PACKAGED_LISTS`, and the enums rendered from
-  them (queue row 101, open); `scripts/refresh_reference.py`'s docstring is the recipe
-  for this package. The refresh budget: 102 keyless requests (the agencies, then
+  (v0.3.0) puts a table in the script's `TABLES` and its name in `PACKAGED_LISTS`;
+  ESMIS's own script has neither, renders no enum and leaves `PACKAGED_LISTS` empty
+  (queue row 101); its docstring is the recipe for this package. The refresh budget:
+  102 keyless requests (the agencies, then
   `/publication/findAll` pages 0 to 100, bounded by `total_pages`) at 30 a minute, about
   four minutes, run once before each release and committed in a refresh PR of its own
   when a table changed, none when both are unchanged (Workflow rules; decided by
