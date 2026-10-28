@@ -328,6 +328,18 @@ def test_a_cut_list_carries_its_tools_note(
     assert cut["note"] == note
 
 
+@pytest.mark.anyio
+async def test_no_tool_description_states_the_cap() -> None:
+    """The cap's advice is in the notes of ``MCP_CAPS``, never in a tool's description."""
+    tools = {tool.name: tool for tool in await server.list_tools()}
+    for name in tasks.__all__:
+        if name in tasks.BULK_TASKS:
+            continue
+        description = tools[tool_name(SOURCE, getattr(tasks, name))].description or ""
+        for text in ("200 rows", "64 KB", "65536"):
+            assert text not in description, (name, text)
+
+
 def test_search_publications_collects_every_page(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("publication_search", "wasde_page0", match_params=["query", "page"])
     result = tasks.search_publications("wasde")

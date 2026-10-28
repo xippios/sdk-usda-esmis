@@ -329,11 +329,9 @@ async def list_publications_async(
     keeps a publication's ``id``, ``identifier``, ``title``, ``agency_acronym``,
     ``publication_agency_export_1``, ``frequency``, ``status`` and ``resource_type``, in
     upstream order; its ``identifier`` values are what ``get_publication``,
-    ``list_releases`` and ``get_latest_release`` take (pass one without ``/``). The MCP
-    tool returns at most 200 rows or 64 KB, the first 200 of 2522 when called without a
-    filter: filter with ``search`` or ``agency_acronym``; Python and HTTP callers get the
-    whole table. ``meta.retrieved_at`` is when the table was fetched, ``meta.endpoint`` the
-    operation it came from. An ``agency_acronym`` the packaged agency table lacks raises
+    ``list_releases`` and ``get_latest_release`` take (pass one without ``/``).
+    ``meta.retrieved_at`` is when the table was fetched, ``meta.endpoint`` the operation it
+    came from. An ``agency_acronym`` the packaged agency table lacks raises
     ``InvalidRequestError`` naming the closest acronyms.
 
     Args:
@@ -378,14 +376,12 @@ async def search_publications_async(
     """Publications (report series) matching a keyword: find the identifier other tools take.
 
     One request per page of 25 (``esmis_api_publication_search``): ``page`` given returns
-    that page, omitted every page. ``"wasde"`` matched 7 publications on 2026-10-27, WASDE
-    itself (identifier ``"wasde"``) among them. The MCP tool returns at most 200 rows or
-    64 KB, about 36 publications at about 1.8 KB each (the recorded WASDE matches range
-    0.9-2.5 KB): page a broad keyword with ``page`` (0, 1, ...) until a page is short. A
-    publication's ``identifier`` values are what ``get_publication``, ``list_releases``
-    and ``get_latest_release`` take; pass one without ``/``. ``meta.total`` is upstream's
-    count of matches. An empty or blank ``query`` raises ``InvalidRequestError`` before
-    anything is sent: ESMIS requires one and answers an empty one with nothing.
+    that page, omitted every page, walked from page 0. ``"wasde"`` matched 7 publications
+    on 2026-10-27, WASDE itself (identifier ``"wasde"``) among them. A publication's
+    ``identifier`` values are what ``get_publication``, ``list_releases`` and
+    ``get_latest_release`` take; pass one without ``/``. ``meta.total`` is upstream's count
+    of matches. An empty or blank ``query`` raises ``InvalidRequestError`` before anything
+    is sent: ESMIS requires one and answers an empty one with nothing.
 
     Args:
         query: The keyword, e.g. ``"wasde"``, ``"crops"``.
@@ -460,12 +456,11 @@ async def list_releases_async(
     dated before ``since``, or at the last page. ``since`` and ``until`` keep the releases
     whose ``release_datetime`` date, as printed, lies between them, both included.
     Without ``page`` or ``since`` every page is fetched (29 requests for WASDE's 703
-    releases, paced at 30 a minute), and the MCP tool returns at most 200 rows or 64 KB:
-    bound the call with ``since`` and ``until``, or page. An identifier ESMIS does not
-    know gives the empty list with ``meta.total`` 0. ``meta.total`` is upstream's count of
-    the publication's releases before the date filter, so it can exceed the rows
-    returned. ``meta.vintage`` and ``meta.published_at`` stay empty: each release has its
-    own (``get_release``).
+    releases, paced at 30 a minute): pass ``since``, which ends the walk, or ``page`` to
+    send fewer. An identifier ESMIS does not know gives the empty list with
+    ``meta.total`` 0. ``meta.total`` is upstream's count of the publication's releases
+    before the date filter, so it can exceed the rows returned. ``meta.vintage`` and
+    ``meta.published_at`` stay empty: each release has its own (``get_release``).
 
     Args:
         publication_identifier: One of a publication's ``identifier`` values, e.g.
