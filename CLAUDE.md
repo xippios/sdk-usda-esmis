@@ -87,11 +87,13 @@ The snapshot in `docs/upstream/` is the reference for names, parameters and sema
   `release_datetime`, never converted, and its `meta.total` is upstream's count before
   that filter. `get_latest_release` takes the latest `release_datetime` of page 0,
   never the highest id. `meta.request` omits what the caller left `None`. Every tool keeps
-  the default cap (200 rows or 64 KB); `MCP_CAPS` gives `list_publications` a note of its
-  own (next item). The default can cut two tools called without `page`: `list_releases`
-  (703 rows for WASDE) and a broad `search_publications` (about 1.8 KB a publication, so
-  after some 36 matches). Their docstrings tell an agent to page, `list_releases`'s also
-  to bound the call with `since` and `until`.
+  the default cap (200 rows or 64 KB); `MCP_CAPS` gives three tools a note of their own
+  that names their parameters for seeing the rest (ADR-0016, conventions §8):
+  `list_publications` (next item), and the two the default can cut when called without
+  `page`, `list_releases` (703 rows for WASDE; its note names `since`, `until` and
+  `page`) and a broad `search_publications` (about 1.8 KB a publication, so after some 36
+  matches; its note names `page`). The notes carry the cap, so the task docstrings, which
+  are the tool descriptions, never state it (sdk-core's handover, "Adopting core 0.3.0").
 - **The packaged tables.** `reference/publication.json` (2522 publications, each the
   eight columns of `PublicationRow`, a projection of `Publication`) and
   `reference/agency.json` (9 agencies, every field) are `PackagedList` files, written by
@@ -124,10 +126,22 @@ The snapshot in `docs/upstream/` is the reference for names, parameters and sema
   (written by hand, as the template renders it from v0.3.0) and skipped by core's
   `register_tasks` and `router_from_tasks` (ADR-0019): it streams one file with core's
   `download` to the path the caller names, `meta.endpoint` the file's name as upstream
-  prints it; nothing is stored or cached. The download budget: one small file, the
-  current WASDE `.txt` (about 120 KB), for the fixture
-  (`download_release_file/wasde1026_txt.json`, recorded whole) and for the nightly live
-  test, which writes it to a temporary directory.
+  prints it; nothing is stored or cached. Its signature is `(release_id, format=None,
+  dest=None, *, name=None)`, so the positional `(release_id, format, dest)` that
+  `xippios-usda-wasde` sends keeps working. `dest` is required and checked before any
+  request: `None`, a directory or a path in a missing directory is `InvalidRequestError`,
+  the last two with core's own texts. The file is chosen by `name` alone (the file of
+  that name), `format` alone (the first of that format in upstream order) or both (the
+  named file, which must be of that format); neither, or an unknown name, is
+  `InvalidRequestError` naming the release's files, and a name of another format one
+  naming its format. A release with an original and a revised file of one format (95621,
+  the WASDE of 2013-08-12, lists `ORIGwasde-08-12-2013.xml` before
+  `wasde-08-12-2013.xml`) is reached by `name` (decided by Johannes on 2026-10-28). A
+  release's files are `Release.release_files()`, `ReleaseFile.from_url` on each URL, in
+  upstream order: the reading a dependent calls rather than copies (ADR-0021). The
+  download budget: one small file, the current WASDE `.txt` (about 120 KB), for the
+  fixture (`download_release_file/wasde1026_txt.json`, recorded whole) and for the
+  nightly live test, which writes it to a temporary directory.
 - **Core.** The package depends on `xippios-core` 0.3.0 from PyPI (`core_version`
   0.3.0, `~=0.3.0`; template v0.3.0), which carries ADR-0019's `download` and
   `BULK_TASKS` skip and ADR-0022's `published_at_naive`.
