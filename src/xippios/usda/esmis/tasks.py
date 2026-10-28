@@ -1,14 +1,9 @@
-"""Task-shaped functions for USDA ESMIS.
+"""Task functions, the public API: the adapters serve ``__all__`` (conventions §2).
 
-The public API (ADR-0001, layer 2), and the contract of the parser packages that depend
-on this one: such a package imports these tasks and ``models``, never ``api/`` or
-``_client`` (ADR-0021). A task composes endpoint wrappers from ``api/`` and returns
-``Result[T]`` with full ``ResultMeta``. The async version is written, the sync one derived
-with ``xippios.core.sync`` and listed in ``__all__``: the MCP server and the HTTP router
-register exactly what is named there, minus ``BULK_TASKS``.
+``/add-endpoint`` adds them.
 
-Docstrings are read by agents: one sentence first, then ``Args:`` with examples of
-valid values for every parameter. ``/add-endpoint`` walks through the whole recipe.
+The tasks are the contract of the parser packages that depend on this one: such a
+package imports these tasks and ``models``, never ``api/`` or ``_client`` (ADR-0021).
 
 What every task follows:
 
