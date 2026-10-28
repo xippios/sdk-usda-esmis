@@ -1,7 +1,4 @@
-"""The configured ``xippios.core`` client for USDA ESMIS.
-
-One ``AsyncClient`` for the whole package: task functions share its rate limiter and
-cache, and the same instance serves the sync facades and the MCP server.
+"""The package's one configured ``AsyncClient`` and its error mapping (conventions §6).
 
 The catalog is keyless and sends no rate-limit or quota headers, so the client keeps a
 self-imposed pace and installs no ``QuotaPolicy`` (ADR-0010, ADR-0015). ``classify`` maps
@@ -27,7 +24,7 @@ BASE_URL = "https://esmis.nal.usda.gov"
 """The host root; every catalog path keeps its ``/api/v1/`` prefix, as the OpenAPI
 document's ``paths`` name it (its one server is ``https://esmis.nal.usda.gov``)."""
 API_KEY_ENV: str | None = None
-# A self-imposed pace: upstream documents no limit (ADR-0010 decision 1).
+# A self-imposed pace: upstream documents no per-second or per-minute limit (ADR-0010 decision 1).
 RATE_LIMIT = RateLimit(per_minute=30, burst=1)
 
 API_PREFIX = "/api/v1/"

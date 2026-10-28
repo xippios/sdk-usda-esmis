@@ -26,24 +26,18 @@ table = PackagedList.load("xippios.usda.esmis", "publication")
 rows = table.parse(PublicationRow, source="usda-esmis")
 ```
 
-Rules:
-
-- Files come from the upstream through `scripts/refresh_reference.py`
-  (`/refresh-reference-data`), written with `PackagedList.write`, never typed in by hand.
-  The template's script also regenerates `enums.py` with one
-  `xippios.core.reference.render_enums` call; this package generates no enum from them
-  (0.1.0): the three enumerations of `Publication` (`Status`, `Subscribable`,
-  `ResourceType`) are the OpenAPI document's, hand-written in `models.py`, and neither
-  table is a value list.
-- Files keep upstream's names: records under upstream's field names
-  (`UpstreamModel.dump_upstream`), a field upstream leaves out as `null`.
-- Every file has a row below naming the endpoint it came from and the UTC time of its
-  first request; the script rewrites the rows.
-- Agents get a lookup task for every packaged list so they can form valid calls:
-  `list_publications` (`usda_esmis_list_publications`) for the publications, and
-  `list_agencies` (`usda_esmis_list_agencies`), which asks upstream, for the agencies.
-- A multi-tenant source packages no tenant data (ADR-0014), only lists that are the same
-  for every tenant; ESMIS has no tenants.
+Each file holds `{"param", "endpoint", "fetched", "records"}` and an optional
+`"note"`, upstream's records under upstream's field names (`UpstreamModel.dump_upstream`),
+a field upstream leaves out as `null`, written by `scripts/refresh_reference.py`
+(`/refresh-reference-data`) with `PackagedList.write`, never by hand, and read with
+`PackagedList.load`; the script rewrites the table below. No enum is generated from them:
+the three enumerations of `Publication` (`Status`, `Subscribable`, `ResourceType`) are the
+OpenAPI document's, hand-written in `models.py`, and neither table is a value list. The
+agents' lookup tasks are `list_publications` (`usda_esmis_list_publications`) for the
+publications and `list_agencies` (`usda_esmis_list_agencies`), which asks upstream, for
+the agencies. One row per file: Origin is the endpoint it was fetched from, none being
+rebuilt from a `docs/upstream/` file; Fetched is the UTC time of that fetch's first
+request.
 
 | File | Origin | Fetched |
 | --- | --- | --- |

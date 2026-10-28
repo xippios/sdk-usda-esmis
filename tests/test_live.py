@@ -1,4 +1,6 @@
-"""Live smoke tests: skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
+"""Live smoke tests, one per task, skipped unless XIPPIOS_LIVE_TESTS=1 (conventions §10).
+
+``/add-endpoint`` adds them.
 
 One live smoke test per task, nine in all, next to the reachability check, one test of
 the order the release tasks rely on and one of the packaged agency table; keyless,

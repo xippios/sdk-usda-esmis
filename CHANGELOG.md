@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Adopted sdk-template v0.3.0, with xippios-core 0.3.0 and conventions 1.22 (conventions §15).
+
 ## [0.1.0] - 2026-10-27
 
 ### Added

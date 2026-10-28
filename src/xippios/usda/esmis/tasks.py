@@ -1,14 +1,9 @@
-"""Task-shaped functions for USDA ESMIS.
+"""Task functions, the public API: the adapters serve ``__all__`` (conventions §2).
 
-The public API (ADR-0001, layer 2), and the contract of the parser packages that depend
-on this one: such a package imports these tasks and ``models``, never ``api/`` or
-``_client`` (ADR-0021). A task composes endpoint wrappers from ``api/`` and returns
-``Result[T]`` with full ``ResultMeta``. The async version is written, the sync one derived
-with ``xippios.core.sync`` and listed in ``__all__``: the MCP server and the HTTP router
-register exactly what is named there, minus ``BULK_TASKS``.
+``/add-endpoint`` adds them.
 
-Docstrings are read by agents: one sentence first, then ``Args:`` with examples of
-valid values for every parameter. ``/add-endpoint`` walks through the whole recipe.
+The tasks are the contract of the parser packages that depend on this one: such a
+package imports these tasks and ``models``, never ``api/`` or ``_client`` (ADR-0021).
 
 What every task follows:
 
@@ -97,7 +92,10 @@ __all__ = [
 
 BULK_TASKS = frozenset({"download_release_file"})
 """Tasks the adapters skip (ADR-0019, decision 4): they write a file, which no tool or
-route hands out. Hand-written until the template renders it (template v0.3.0)."""
+route hands out. Written by hand, as the template renders it from v0.3.0; core's
+``register_tasks`` (which ``build_server`` calls) and ``router_from_tasks`` read it from
+this module and leave its names out, so ``mcp.py`` and ``http.py`` pass ``__all__``
+whole."""
 
 # One tool has an entry, the family default cap with a note of its own (conventions §8,
 # ADR-0016; decided by Johannes on 2026-10-27): list_publications keeps 200 rows or

@@ -107,6 +107,8 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
+      # The one checkout that keeps its credentials: this job pushes the tag with the token
+      # (conventions §13).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # sdk-template's one step beyond core's file: a source that pins core to git cannot
       # be published (conventions §12), and core has no pin to guard. It stops the release
