@@ -16,7 +16,9 @@ download is checked by path, size and content type, never by what the file says
 (ADR-0020).
 """
 
+import inspect
 import json
+import re
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from importlib import resources
@@ -266,6 +268,64 @@ def test_the_python_task_returns_the_whole_table_the_tool_caps() -> None:
     cut = json.loads(cap_result(result, cap))
     assert cut["data"] == json.loads(whole)["data"][:200]
     assert cut["note"] == CAP_NOTE
+
+
+CAPPED_PARAMETERS = {
+    "list_publications": ["search", "agency_acronym"],
+    "list_releases": ["since", "until", "page"],
+    "search_publications": ["page"],
+}
+"""The tools with a cap of their own, and the parameters each cap's note names."""
+
+
+def test_three_tools_keep_the_default_cap_with_a_note_naming_their_parameters() -> None:
+    assert set(tasks.MCP_CAPS) == set(CAPPED_PARAMETERS)
+    default = ResultCap()
+    for name, named in CAPPED_PARAMETERS.items():
+        cap = tasks.MCP_CAPS[name]
+        assert (cap.max_rows, cap.max_bytes) == (default.max_rows, default.max_bytes), name
+        assert cap.note is not None
+        parameters = inspect.signature(getattr(tasks, name)).parameters
+        for parameter in named:
+            assert re.search(rf"\b{parameter}\b", cap.note), (name, parameter)
+            assert parameter in parameters, "a note never promises a filter the tool lacks"
+
+
+@pytest.mark.parametrize(
+    ("task", "call", "fixture", "note"),
+    [
+        (
+            "list_releases",
+            lambda: tasks.list_releases("wasde", page=0),
+            ("release_find_by_identifier", "wasde_page0"),
+            "showing 10 of 25 rows (cap: 10 rows or 65536 bytes); bound the release dates "
+            "with since and until (e.g. 2026-01-01), or pass page (0 for the newest 25 "
+            "releases, then 1, 2, ...) to see the rest",
+        ),
+        (
+            "search_publications",
+            lambda: tasks.search_publications("wasde"),
+            ("publication_search", "wasde_page0"),
+            "showing 5 of 7 rows (cap: 5 rows or 65536 bytes); pass page (0, 1, 2, ...; 25 "
+            "publications a page) to see the rest",
+        ),
+    ],
+    ids=["list_releases", "search_publications"],
+)
+def test_a_cut_list_carries_its_tools_note(
+    replay_fixture: ReplayFixture,
+    task: str,
+    call: Callable[[], Result[Any]],
+    fixture: tuple[str, str],
+    note: str,
+) -> None:
+    replay_fixture(*fixture)
+    result = call()
+    rows = int(note.split()[1])
+    cap = ResultCap(max_rows=rows, note=tasks.MCP_CAPS[task].note)
+    cut = json.loads(cap_result(result, cap))
+    assert len(cut["data"]) == rows
+    assert cut["note"] == note
 
 
 def test_search_publications_collects_every_page(replay_fixture: ReplayFixture) -> None:

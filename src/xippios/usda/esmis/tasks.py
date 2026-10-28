@@ -99,26 +99,37 @@ route hands out. Written by hand, as the template renders it from v0.3.0; core's
 this module and leave its names out, so ``mcp.py`` and ``http.py`` pass ``__all__``
 whole."""
 
-# One tool has an entry, the family default cap with a note of its own (conventions §8,
-# ADR-0016; decided by Johannes on 2026-10-27): list_publications keeps 200 rows or
-# 64 KB, and its note names its two filters. Unfiltered it answers the whole packaged
-# table, 2522 rows fetched on 2026-10-27, whose result, envelope included, measured
-# 599,402 bytes of compact JSON (UTF-8, as cap_result counts them), about 150k tokens:
-# too much for one tool result, so, as with sdk-comtrade's HS list, an agent filters it
-# with search and is never served it whole; Python and HTTP callers get the whole table.
-# Every other tool keeps the default and its note: list_agencies answers 9 rows and
-# list_release_files at most 4 files as recorded. Two tools called without page can
-# exceed it: list_releases answers hundreds of rows (703 for WASDE), and
-# search_publications every match of a keyword, about 1.8 KB a publication as the WASDE
-# matches average (0.6 KB on publication_find_all's page 0), so 64 KB can cut a broad
-# keyword's list after some 36; a page of 25 fits at those sizes (about 45 KB). The
-# default cap applies to both, with its note, and their docstrings tell an agent to page,
-# list_releases's also to bound the call with since and until.
+# Three tools have an entry, each the family default cap, 200 rows or 64 KB, with a note
+# of its own that names the tool's parameters for seeing the rest, since the default note
+# names none (conventions §8, ADR-0016). The notes carry the cap's advice, so the task
+# docstrings, which are the tool descriptions, leave it out (sdk-core's handover,
+# "Adopting core 0.3.0").
+# - list_publications (decided by Johannes on 2026-10-27): unfiltered it answers the
+#   whole packaged table, 2522 rows fetched on 2026-10-27, whose result, envelope
+#   included, measured 599,402 bytes of compact JSON (UTF-8, as cap_result counts them),
+#   about 150k tokens: too much for one tool result, so, as with sdk-comtrade's HS list,
+#   an agent filters it with search or agency_acronym and is never served it whole;
+#   Python and HTTP callers get the whole table.
+# - list_releases, called without page, answers every release of a publication from
+#   since on, hundreds of rows (703 for WASDE): its note names since, until and page.
+# - search_publications, called without page, answers every match of a keyword, about
+#   1.8 KB a publication as the WASDE matches average (0.6 KB on publication_find_all's
+#   page 0), so 64 KB can cut a broad keyword's list after some 36; a page of 25 fits at
+#   those sizes (about 45 KB): its note names page, the one parameter beside query.
+# Every other tool keeps the default and its note: list_agencies answers 9 rows, and
+# list_release_files at most 6 files as recorded.
 MCP_CAPS: Mapping[str, ResultCap] = {
     "list_publications": ResultCap(
         note="filter with search (text of an id, an identifier or a title) or agency_acronym "
         "(as list_agencies spells it) to see the rest; Python and HTTP callers get the whole "
         "table",
+    ),
+    "list_releases": ResultCap(
+        note="bound the release dates with since and until (e.g. 2026-01-01), or pass page "
+        "(0 for the newest 25 releases, then 1, 2, ...) to see the rest",
+    ),
+    "search_publications": ResultCap(
+        note="pass page (0, 1, 2, ...; 25 publications a page) to see the rest",
     ),
 }
 
