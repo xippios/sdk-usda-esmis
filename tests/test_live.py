@@ -2,9 +2,9 @@
 
 ``/add-endpoint`` adds them.
 
-One live smoke test per task, nine in all, next to the reachability check, one test of
+One live smoke test per task, ten in all, next to the reachability check, one test of
 the order the release tasks rely on and one of the packaged agency table; keyless,
-fourteen requests in all, paced by the client at 30 a minute. Each task test checks the
+fifteen requests in all, paced by the client at 30 a minute. Each task test checks the
 shape of what ESMIS answers today, never a value that changes with the next release.
 ``list_publications`` sends nothing: its test compares the packaged table's size with
 upstream's count today. The download fetches the current WASDE ``.txt`` alone (about
@@ -14,7 +14,8 @@ directory, and checks the file's size, never what it says (ADR-0020). Requests: 
 reachability check 1, ``list_agencies`` 1, the packaged agency table 1,
 ``list_publications`` 1 (page 0 of ``esmis_api_publication_findAll``, for its count),
 ``search_publications`` 1 (one short page), ``get_publication`` 1, ``list_releases`` 1
-(page 0), ``get_release`` 1, ``get_latest_release`` 1, ``list_release_files`` 1, the
+(page 0), ``list_recent_releases`` 1 (page 0, which also checks the id order its walk
+relies on), ``get_release`` 1, ``get_latest_release`` 1, ``list_release_files`` 1, the
 download 3 (the latest WASDE release, the release, the file) and the order check 1.
 """
 
@@ -122,6 +123,17 @@ async def test_page_zero_of_a_publication_is_newest_first() -> None:
     times = [release.release_datetime for release in answer.results]
     assert len(times) > 1
     assert times == sorted(times, reverse=True)
+
+
+async def test_list_recent_releases_live() -> None:
+    """Page 0 of every release: a full page, the highest id first, as the walk relies on."""
+    result = await tasks.list_recent_releases_async(page=0)
+    assert len(result.data) == tasks.PAGE_SIZE
+    ids = [int(release.id) for release in result.data]
+    assert ids == sorted(ids, reverse=True)
+    assert result.meta.endpoint == "esmis_api_release_findAll"
+    assert result.meta.total is not None
+    assert result.meta.total >= len(result.data)
 
 
 async def test_get_release_live() -> None:
