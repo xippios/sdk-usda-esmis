@@ -51,7 +51,7 @@ template answer, a protected path, a build or install route) waits for Johannes
 - [ ] every local workaround a core change replaced is deleted, its tests with it, the core change named for each in the PR description
 - [ ] logic duplicated across sources moved into core or dropped; what core lacks is carried by the source and named in a queue row, a second copy only when the row names both sources, never a third (ADR-0023)
 - [ ] every test that asserted a limiter wait or a quota pause is marked `rate_limited`, and one that asserted key resolution has a module-level `placeholder_api_key` override that pins nothing (ADR-0013, ADR-0015)
-- [ ] generated enum files re-rendered once and committed as rendered
+- [ ] generated enum files re-rendered once through the template's refresh script and committed as formatted, after its `ruff format && ruff check --fix`
 - [ ] `mypy --strict` covers `scripts/` too
 - [ ] the current conventions version applied
 - [ ] `CHANGELOG.md` line under Unreleased naming the core, template and conventions versions adopted
