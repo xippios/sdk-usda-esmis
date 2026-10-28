@@ -92,7 +92,9 @@ __all__ = [
 
 BULK_TASKS = frozenset({"download_release_file"})
 """Tasks the adapters skip (ADR-0019, decision 4): they write a file, which no tool or
-route hands out. Hand-written until the template renders it (template v0.3.0)."""
+route hands out. Written by hand, as the template renders it from v0.3.0; core's
+``build_server`` and ``router_from_tasks`` read it from this module and leave its names
+out, so ``mcp.py`` and ``http.py`` pass ``__all__`` whole."""
 
 # One tool has an entry, the family default cap with a note of its own (conventions §8,
 # ADR-0016; decided by Johannes on 2026-10-27): list_publications keeps 200 rows or
