@@ -32,10 +32,11 @@ What every task follows:
   identifier carrying ``/`` is refused by ESMIS's web server, raised as
   ``InvalidRequestError``.
 - Paging: pages are 0-based and hold 25 items. ``page`` given returns that page; omitted,
-  ``_Pages`` walks them from page 0. ``list_recent_releases`` walks only from ``since``,
-  under its own stop rule (``_newest_before``), and refuses a call with neither
-  ``since`` nor ``page`` before any request: every page of
-  ``esmis_api_release_findAll`` is some 34 hours of requests (ADR-0007).
+  ``_Pages`` walks them from page 0. ``list_recent_releases`` walks only from a ``since``
+  on or after ``CATALOG_ORDER_SINCE``, under its own stop rule (``_newest_before``), and
+  refuses an older ``since`` and a call with neither ``since`` nor ``page`` before any
+  request: every page of ``esmis_api_release_findAll`` is some 34 hours of requests
+  (ADR-0007).
 - Release times: ``meta.vintage`` is the release id as printed (``"796099"``). The four
   tasks about one release (``get_release``, ``get_latest_release``, ``list_release_files``,
   ``download_release_file``) set ``meta.published_at`` to its ``release_datetime`` as
@@ -163,11 +164,31 @@ ORDER_TOLERANCE = timedelta(days=14)
 
 ``esmis_api_release_findAll`` lists the highest id first; the walk stops after a page
 whose newest release is dated more than this before ``since`` (``_newest_before``). The
-largest gap recorded: release 796123 (``CropProd``, dated 2026-10-09) was catalogued
-after four releases dated 2026-10-23 (``release_find_all/page0.json``, 2026-10-27). The
-only other one on the two recorded pages is 9 days: 796098 (dated 2026-09-28) was
-catalogued after 796097 (dated 2026-10-07; ``page1.json``, 2026-10-28). No recorded
-release is dated after the newest of the 25 catalogued after it."""
+largest gap on the operation's two recorded pages: release 796123 (``CropProd``, dated
+2026-10-09) was catalogued after four releases dated 2026-10-23
+(``release_find_all/page0.json``, 2026-10-27). The only other one on those pages is 9
+days: 796098 (dated 2026-09-28) was catalogued after 796097 (dated 2026-10-07;
+``page1.json``, 2026-10-28). No release on those two pages is dated after the newest of
+the 25 catalogued after it. The order beyond them is read from the WASDE recordings
+(``CATALOG_ORDER_SINCE``), not probed."""
+
+CATALOG_ORDER_SINCE = date(2025, 9, 12)
+"""The oldest ``since`` that ``list_recent_releases`` walks from: ESMIS's migration.
+
+``esmis_api_release_findAll``'s id order follows creation only for the releases
+catalogued since ESMIS's migration. WASDE's releases as recorded
+(``release_find_by_identifier/wasde_page0.json`` and ``wasde_page1.json``, 2026-10-27;
+``release_find_by_id/95621.json``, 2026-10-28) jump from id 96171 (dated 2025-06-12) to
+791996 (dated 2025-09-12), and below the jump the dates do not follow the ids: 96165 to
+96171 run May, April, March, February, August, July and June 2025, and 95511
+(2022-08-12) and 95621 (2013-08-12) sit above 95482 (2025-01-10). The bound is 791996's
+date, the first WASDE release of the new ids, so every release catalogued in the import
+is taken to be dated on or before it, as WASDE's are (the newest, 96169, is dated
+2025-08-12). A walk from an older ``since`` would reach the imported ids, where a page of
+older-dated releases can sit above a newer one and end the walk early without a sign; so
+such a ``since`` is refused, and ``list_releases`` (one publication, in release order)
+or ``page`` serves the older dates (decided by Johannes on 2026-10-28). Read from the
+WASDE recordings, not probed for other publications."""
 
 
 def _request(**parameters: object) -> dict[str, object]:
@@ -560,26 +581,33 @@ async def list_recent_releases_async(
     publication, latest catalogued first (the highest id), an order observed on
     2026-10-27, not documented. Release dates only mostly follow it: a release can be
     catalogued days after its release time and sit among newer ones (page 0 of 2026-10-27
-    runs 2026-10-26, 2026-10-09, 2026-10-23). ``page`` given returns that page. ``since``
-    given without ``page`` walks the pages from page 0 and stops after the first page
-    whose newest release is dated more than 14 days before ``since``: 14 days is the
-    largest gap recorded, release 796123, dated 2026-10-09, catalogued after four dated
-    2026-10-23. A release catalogued more than 14 days before its release time can lie
-    past that page, where only ``page`` reaches it. ``since`` and ``until`` keep the
-    releases whose ``release_datetime`` date, as printed, lies between them, both
-    included. Lately a page holds about two weeks of releases (page 1 of 2026-10-28 runs
-    2026-10-09 back to 2026-09-24), fetched at 30 requests a minute, so a ``since`` a
-    month back costs about four requests, and one years back walks for hours. A call
-    with neither ``since`` nor ``page`` raises ``InvalidRequestError`` before any
-    request: it would walk all 1,542,025 releases on 61,681 pages, as recorded on
-    2026-10-27, about 34 hours; so does ``until`` alone, which bounds nothing of the
-    walk, and a ``since`` after ``until``. ``meta.total`` is upstream's count of every
-    release, before the date filter. ``meta.vintage`` and ``meta.published_at`` stay
-    empty: each release has its own (``get_release``).
+    runs 2026-10-26, 2026-10-09, 2026-10-23). ``page`` given returns that page, which
+    ``since`` and ``until`` only filter, whatever their dates. ``since`` given without
+    ``page`` walks the pages from page 0 and stops after the first page whose newest
+    release is dated more than 14 days before ``since``: 14 days is the largest gap on
+    the operation's two recorded pages, release 796123, dated 2026-10-09, catalogued after
+    four dated 2026-10-23. The walk misses a release catalogued more than 14 days before
+    its release time, and one catalogued before a page of older-dated releases; ``page``
+    reaches them. The ids follow creation only since ESMIS's migration, whose first WASDE
+    release is dated 2025-09-12; below it the dates do not follow the ids, so a walk from
+    a ``since`` before 2025-09-12 raises ``InvalidRequestError`` before any request:
+    ``list_releases`` lists one publication's releases in release order, and ``page``
+    reads older pages. ``since`` and ``until`` keep the releases whose
+    ``release_datetime`` date, as printed, lies between them, both included. Lately a
+    page holds about two weeks of releases (page 1 of 2026-10-28 runs 2026-10-09 back to
+    2026-09-24), fetched at 30 requests a minute, so a ``since`` a month back costs about
+    four requests and one a year back some 26 to 30, about a minute. A call with neither
+    ``since`` nor ``page`` raises ``InvalidRequestError`` before any request: it would
+    walk all 1,542,025 releases on 61,681 pages, as recorded on 2026-10-27, about 34
+    hours; so does ``until`` alone, which bounds nothing of the walk, and a ``since``
+    after ``until``. ``meta.total`` is upstream's count of every release, before the date
+    filter. ``meta.vintage`` and ``meta.published_at`` stay empty: each release has its
+    own (``get_release``).
 
     Args:
-        since: The earliest release date to keep, e.g. ``2026-10-20`` (a date); the walk
-            stops by it. ``None`` (the default) needs ``page``.
+        since: The earliest release date to keep, e.g. ``2026-10-20`` (a date); without
+            ``page`` the walk stops by it, and it must be on or after ``2025-09-12``.
+            ``None`` (the default) needs ``page``.
         until: The latest release date to keep, e.g. ``2026-10-23`` (a date); ``None``
             (the default) keeps every one up to the newest.
         page: A 0-based page of 25, e.g. ``0`` for the 25 newest catalogued releases;
@@ -588,6 +616,15 @@ async def list_recent_releases_async(
     if since is not None and until is not None and since > until:
         raise InvalidRequestError(
             f"since ({since}) is after until ({until}): no release can lie between them",
+            source=SOURCE,
+        )
+    if page is None and since is not None and since < CATALOG_ORDER_SINCE:
+        raise InvalidRequestError(
+            f"since ({since}) is before {CATALOG_ORDER_SINCE}: ESMIS's catalog lists releases "
+            f"in an order that follows their release dates only since {CATALOG_ORDER_SINCE}, "
+            "so a walk from an older since could stop early; use list_releases for one "
+            "publication's releases in release order, pass page to read older pages of the "
+            f"catalog, or pass a since on or after {CATALOG_ORDER_SINCE}",
             source=SOURCE,
         )
     request = _request(since=since, until=until, page=page)
