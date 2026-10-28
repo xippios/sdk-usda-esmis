@@ -95,6 +95,7 @@ exactly tasks.__all__. -->
 | `esmis_api_publication_search`, every page unless `page` is given | `search_publications(query, page=None)` | `usda_esmis_search_publications` | alpha |
 | `esmis_api_publication_findByIdentifier` | `get_publication(publication_identifier)` | `usda_esmis_get_publication` | alpha |
 | `esmis_api_release_findByIdentifier`, pages walked newest first unless `page` is given | `list_releases(publication_identifier, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |
+| `esmis_api_release_findAll`, every publication's releases, pages walked from 0 down to `since` (to the first page whose newest release is dated more than 14 days before it) unless `page` is given | `list_recent_releases(since=None, until=None, page=None)`, refused without `since` or `page` | `usda_esmis_list_recent_releases` | alpha |
 | `esmis_api_release_findById` | `get_release(release_id)` | `usda_esmis_get_release` | alpha |
 | `esmis_api_release_findByIdentifier`, page 0 | `get_latest_release(publication_identifier)` | `usda_esmis_get_latest_release` | alpha |
 | `esmis_api_release_findById` | `list_release_files(release_id)` | `usda_esmis_list_release_files` | alpha |

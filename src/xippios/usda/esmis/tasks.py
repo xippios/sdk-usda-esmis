@@ -12,7 +12,7 @@ What every task follows:
   it (``wasde1026.txt``; ADR-0020, decision 5). ``meta.request`` holds the parameters the
   caller gave, none left ``None`` (ADR-0022); for the download, the ``release_id``,
   ``format`` and ``name`` given, never ``dest``, and the chosen file's ``url``.
-  ``meta.total`` is ``pager.total_results`` of the last page fetched for the two paged
+  ``meta.total`` is ``pager.total_results`` of the last page fetched for the three paged
   list tasks (ADR-0012), ``None`` elsewhere.
   ``meta.retrieved_at`` is when the answer arrived for the tasks that ask upstream: the
   client keeps no cache; ``list_publications`` carries the packaged table's ``fetched``.
@@ -32,7 +32,10 @@ What every task follows:
   identifier carrying ``/`` is refused by ESMIS's web server, raised as
   ``InvalidRequestError``.
 - Paging: pages are 0-based and hold 25 items. ``page`` given returns that page; omitted,
-  ``_Pages`` walks them from page 0.
+  ``_Pages`` walks them from page 0. ``list_recent_releases`` walks only from ``since``,
+  under its own stop rule (``_newest_before``), and refuses a call with neither
+  ``since`` nor ``page`` before any request: every page of
+  ``esmis_api_release_findAll`` is some 34 hours of requests (ADR-0007).
 - Release times: ``meta.vintage`` is the release id as printed (``"796099"``). The four
   tasks about one release (``get_release``, ``get_latest_release``, ``list_release_files``,
   ``download_release_file``) set ``meta.published_at`` to its ``release_datetime`` as
@@ -48,7 +51,7 @@ What every task follows:
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from os import PathLike
 from pathlib import Path
 from urllib.parse import quote
@@ -87,6 +90,7 @@ __all__ = [
     "get_release",
     "list_agencies",
     "list_publications",
+    "list_recent_releases",
     "list_release_files",
     "list_releases",
     "search_publications",
@@ -99,7 +103,7 @@ route hands out. Written by hand, as the template renders it from v0.3.0; core's
 this module and leave its names out, so ``mcp.py`` and ``http.py`` pass ``__all__``
 whole."""
 
-# Three tools have an entry, each the family default cap, 200 rows or 64 KB, with a note
+# Four tools have an entry, each the family default cap, 200 rows or 64 KB, with a note
 # of its own that names the tool's parameters for seeing the rest, since the default note
 # names none (conventions §8, ADR-0016). The notes carry the cap's advice, so the task
 # docstrings, which are the tool descriptions, leave it out (sdk-core's handover,
@@ -116,6 +120,10 @@ whole."""
 #   1.8 KB a publication as the WASDE matches average (0.6 KB on publication_find_all's
 #   page 0), so 64 KB can cut a broad keyword's list after some 36; a page of 25 fits at
 #   those sizes (about 45 KB): its note names page, the one parameter beside query.
+# - list_recent_releases, called with since, answers every release of every publication
+#   from since on, lately a page of 25 every two weeks or so; a release on
+#   /release/findAll is about 0.46 KB (335 to 575 bytes on its pages 0 and 1), so 64 KB
+#   cuts after some 140 rows, before the 200-row cap: its note names since, until and page.
 # Every other tool keeps the default and its note: list_agencies answers 9 rows, and
 # list_release_files at most 6 files as recorded.
 MCP_CAPS: Mapping[str, ResultCap] = {
@@ -131,6 +139,10 @@ MCP_CAPS: Mapping[str, ResultCap] = {
     "search_publications": ResultCap(
         note="pass page (0, 1, 2, ...; 25 publications a page) to see the rest",
     ),
+    "list_recent_releases": ResultCap(
+        note="narrow the window with since and until (e.g. 2026-10-20), or pass page (0 for "
+        "the 25 newest catalogued releases, then 1, 2, ...) to see the rest",
+    ),
 }
 
 PAGE_SIZE = 25
@@ -144,6 +156,18 @@ SEARCH = "esmis_api_publication_search"
 PUBLICATION = "esmis_api_publication_findByIdentifier"
 RELEASE = "esmis_api_release_findById"
 RELEASES = "esmis_api_release_findByIdentifier"
+ALL_RELEASES = "esmis_api_release_findAll"
+
+ORDER_TOLERANCE = timedelta(days=14)
+"""How far release dates may stray from the order ``list_recent_releases``'s walk follows.
+
+``esmis_api_release_findAll`` lists the highest id first; the walk stops after a page
+whose newest release is dated more than this before ``since`` (``_newest_before``). The
+largest gap recorded: release 796123 (``CropProd``, dated 2026-10-09) was catalogued
+after four releases dated 2026-10-23 (``release_find_all/page0.json``, 2026-10-27). The
+only other one on the two recorded pages is 9 days: 796098 (dated 2026-09-28) was
+catalogued after 796097 (dated 2026-10-07; ``page1.json``, 2026-10-28). No recorded
+release is dated after the newest of the 25 catalogued after it."""
 
 
 def _request(**parameters: object) -> dict[str, object]:
@@ -162,8 +186,9 @@ class _Pages[T]:
     page is ``offset // PAGE_SIZE``. Two bounds it cannot see live in ``fetch``, which
     answers an empty page without a request once one is reached: ``pager.total_pages``
     of the last answer, so a full last page costs no request past the end, and ``last``,
-    a task's own end (``list_releases``'s ``since``). The ``current_page`` an answer
-    echoes is never read: a page past the last echoes the last one's number.
+    a task's own end (``since``, for ``list_releases`` and ``list_recent_releases``). The
+    ``current_page`` an answer echoes is never read: a page past the last echoes the last
+    one's number.
 
     Attributes:
         fetch_page: The wrapper call for one page, answering its ``pager`` and items.
@@ -198,6 +223,24 @@ class _Pages[T]:
 def _total(pager: Pager | tuple[()]) -> int | None:
     """Upstream's ``total_results``, or ``None`` where it sent ``"pager": []``."""
     return pager.total_results if isinstance(pager, Pager) else None
+
+
+def _newest_before(since: date) -> Callable[[list[Release]], bool]:
+    """The stop rule of ``list_recent_releases``'s walk from page 0, for a ``since``.
+
+    A page ends the walk when its newest release is dated more than ``ORDER_TOLERANCE``
+    before ``since``, on the printed date of ``release_datetime``, never converted.
+    ``esmis_api_release_findAll`` lists the latest catalogued first, and release dates only
+    mostly follow it, so a page's oldest date says little (page 0 of 2026-10-27 ends with
+    a release dated 2026-09-28 after 24 dated 2026-10-09 or later); its newest says where
+    the walk is. An empty page is no stop: the walk ends there anyway.
+    """
+    bound = since - ORDER_TOLERANCE
+
+    def last(items: list[Release]) -> bool:
+        return bool(items) and max(item.release_datetime.date() for item in items) < bound
+
+    return last
 
 
 def _path(prefix: str, value: str) -> str:
@@ -506,6 +549,81 @@ async def list_releases_async(
     return Result(data=[release for release in releases if kept(release)], meta=meta)
 
 
+async def list_recent_releases_async(
+    since: date | None = None,
+    until: date | None = None,
+    page: int | None = None,
+) -> Result[list[Release]]:
+    """What USDA released across every ESMIS publication since a date, each with its files.
+
+    ``esmis_api_release_findAll``, one request per page of 25: the releases of every
+    publication, latest catalogued first (the highest id), an order observed on
+    2026-10-27, not documented. Release dates only mostly follow it: a release can be
+    catalogued days after its release time and sit among newer ones (page 0 of 2026-10-27
+    runs 2026-10-26, 2026-10-09, 2026-10-23). ``page`` given returns that page. ``since``
+    given without ``page`` walks the pages from page 0 and stops after the first page
+    whose newest release is dated more than 14 days before ``since``: 14 days is the
+    largest gap recorded, release 796123, dated 2026-10-09, catalogued after four dated
+    2026-10-23. A release catalogued more than 14 days before its release time can lie
+    past that page, where only ``page`` reaches it. ``since`` and ``until`` keep the
+    releases whose ``release_datetime`` date, as printed, lies between them, both
+    included. Lately a page holds about two weeks of releases (page 1 of 2026-10-28 runs
+    2026-10-09 back to 2026-09-24), fetched at 30 requests a minute, so a ``since`` a
+    month back costs about four requests, and one years back walks for hours. A call
+    with neither ``since`` nor ``page`` raises ``InvalidRequestError`` before any
+    request: it would walk all 1,542,025 releases on 61,681 pages, as recorded on
+    2026-10-27, about 34 hours; so does ``until`` alone, which bounds nothing of the
+    walk, and a ``since`` after ``until``. ``meta.total`` is upstream's count of every
+    release, before the date filter. ``meta.vintage`` and ``meta.published_at`` stay
+    empty: each release has its own (``get_release``).
+
+    Args:
+        since: The earliest release date to keep, e.g. ``2026-10-20`` (a date); the walk
+            stops by it. ``None`` (the default) needs ``page``.
+        until: The latest release date to keep, e.g. ``2026-10-23`` (a date); ``None``
+            (the default) keeps every one up to the newest.
+        page: A 0-based page of 25, e.g. ``0`` for the 25 newest catalogued releases;
+            ``None`` (the default) walks the pages from page 0 down to ``since``.
+    """
+    if since is not None and until is not None and since > until:
+        raise InvalidRequestError(
+            f"since ({since}) is after until ({until}): no release can lie between them",
+            source=SOURCE,
+        )
+    request = _request(since=since, until=until, page=page)
+
+    def kept(release: Release) -> bool:
+        day = release.release_datetime.date()  # the printed date, never converted
+        return (since is None or day >= since) and (until is None or day <= until)
+
+    if page is not None:
+        answer = await api.release_find_all(page)
+        releases, total = answer.results, _total(answer.pager)
+    elif since is None:
+        alone = (
+            "until alone bounds nothing of the walk, which starts at the newest catalogued "
+            "release; "
+            if until is not None
+            else ""
+        )
+        raise InvalidRequestError(
+            f"pass since or page: {alone}without either, list_recent_releases would walk "
+            "every page of esmis_api_release_findAll, 1,542,025 releases on 61,681 pages as "
+            "recorded on 2026-10-27, about 34 hours at 30 requests a minute; pass since (e.g. "
+            "2026-10-20) or page (0 for the 25 newest catalogued releases)",
+            source=SOURCE,
+        )
+    else:
+
+        async def fetch_page(number: int) -> _PageAnswer[Release]:
+            answer = await api.release_find_all(number)
+            return answer.pager, answer.results
+
+        releases, total = await _Pages(fetch_page, _newest_before(since)).walk()
+    meta = ResultMeta(source=SOURCE, endpoint=ALL_RELEASES, request=request, total=total)
+    return Result(data=[release for release in releases if kept(release)], meta=meta)
+
+
 async def get_release_async(release_id: int) -> Result[Release]:
     """One release by its id: its publication's title, release time and file links.
 
@@ -648,6 +766,7 @@ get_publication = sync(get_publication_async)
 get_release = sync(get_release_async)
 list_agencies = sync(list_agencies_async)
 list_publications = sync(list_publications_async)
+list_recent_releases = sync(list_recent_releases_async)
 list_release_files = sync(list_release_files_async)
 list_releases = sync(list_releases_async)
 search_publications = sync(search_publications_async)
