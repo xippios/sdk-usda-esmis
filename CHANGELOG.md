@@ -43,10 +43,12 @@ All notable changes to this project are documented here. The format follows
   read-only package).
 - `download_release_file(release_id, format=None, dest=None, *, name=None)`: `format`
   and `dest` are optional in the signature, so the positional
-  `(release_id, format, dest)` keeps working, and `dest` is required when called. A
-  `dest` left `None`, a directory or a path in a missing directory raises
+  `(release_id, format, dest)` keeps working, and `dest` is required when called.
+  Breaking: a `dest` left `None`, a directory or a path in a missing directory raises
   `InvalidRequestError` before any request, where a bad `dest` raised core's
-  `ValueError` after the release lookup. `meta.request` holds `name` when given.
+  `ValueError` after the release lookup; `InvalidRequestError` is no `ValueError`, so a
+  caller that caught `ValueError` catches `InvalidRequestError` now. `meta.request`
+  holds `name` when given.
 - The MCP tools `usda_esmis_list_releases` and `usda_esmis_search_publications` keep the
   default cap, 200 rows or 64 KB, with a note of their own: `list_releases`'s names
   `since`, `until` and `page`, `search_publications`'s names `page`.
