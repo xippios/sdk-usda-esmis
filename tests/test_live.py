@@ -74,10 +74,11 @@ async def test_the_packaged_agency_table_matches_upstream_live() -> None:
 PUBLICATION_TOLERANCE = 25
 """How far upstream's count of publications may drift from the packaged table's: a page.
 
-The table is a snapshot, refreshed in a PR of its own before each release. ESMIS lists
-retired publications as ``Inactive`` (489 of 2522 on 2026-10-27), so the count moves
-mostly by the series it adds; a few new series between releases should not fail the
-nightly run, while a page of them means agents miss enough that the refresh is due now."""
+The table is a snapshot: the refresh runs once before each release, and a PR of its own
+follows only when a table changed, none when neither table changed. ESMIS lists retired
+publications as ``Inactive`` (489 of 2522 on 2026-10-27), so the count moves mostly by
+the series it adds; a few new series between releases should not fail the nightly run,
+while a page of them means agents miss enough that the refresh is due now."""
 
 
 async def test_list_publications_live() -> None:

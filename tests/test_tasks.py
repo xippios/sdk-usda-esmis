@@ -8,9 +8,9 @@ every tool but the bulk task is called end to end through the MCP server.
 nothing: its tests mount no fixture and check that no request left. Two answers
 were recorded for the tasks: WASDE's release page 1 (``release_find_by_identifier/
 wasde_page1.json``), which the walk of ``list_releases`` crosses into, and the October
-2026 WASDE ``.txt`` (``release_files/wasde1026_txt.json``), the exchange the download
-replays. The download is checked by path, size and content type, never by what the file
-says (ADR-0020).
+2026 WASDE ``.txt`` (``download_release_file/wasde1026_txt.json``), the exchange the
+download replays. The download is checked by path, size and content type, never by what
+the file says (ADR-0020).
 """
 
 import json
@@ -483,8 +483,8 @@ def test_every_recorded_file_has_a_name_and_a_known_format(endpoint: str, case: 
 
 def test_download_release_file(replay_fixture: ReplayFixture, tmp_path: Path) -> None:
     release = replay_fixture("release_find_by_id", "796099")
-    download = replay_fixture("release_files", "wasde1026_txt")
-    recorded_file = load_fixture(FIXTURES / "release_files" / "wasde1026_txt.json").response
+    download = replay_fixture("download_release_file", "wasde1026_txt")
+    recorded_file = load_fixture(FIXTURES / "download_release_file" / "wasde1026_txt.json").response
     dest = tmp_path / "wasde1026.txt"
     before = datetime.now(UTC)
     result = tasks.download_release_file(796099, "txt", dest)
@@ -509,7 +509,7 @@ def test_download_release_file_refuses_a_format_the_release_lacks(
     replay_fixture: ReplayFixture, tmp_path: Path
 ) -> None:
     replay_fixture("release_find_by_id", "796099")
-    download = replay_fixture("release_files", "wasde1026_txt")
+    download = replay_fixture("download_release_file", "wasde1026_txt")
     with pytest.raises(InvalidRequestError) as caught:
         tasks.download_release_file(796099, "zip", tmp_path / "wasde1026.zip")
     assert str(caught.value) == "release 796099 has no 'zip' file; its formats: pdf, txt, xls, xml"

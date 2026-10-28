@@ -84,7 +84,7 @@ packaged table is about 600 KB, so the tool returns its first 200 rows, while
 heading and the "Task function" column. Each row's Task function cell starts with the
 task's name in backticks, alone or as its call (`get_data(code, year)`); several tasks in
 one row are backticked names separated by commas; prose may follow. The tables list
-exactly tasks.__all__ and tasks_write.__all__. -->
+exactly tasks.__all__. -->
 
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
