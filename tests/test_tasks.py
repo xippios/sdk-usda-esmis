@@ -5,22 +5,23 @@
 Every task is replayed against the answers recorded for the wrappers on 2026-10-27, and
 every tool but the bulk task is called end to end through the MCP server.
 ``list_publications`` answers from the packaged tables in ``reference/`` and sends
-nothing: its tests mount no fixture and check that no request left. Three answers
+nothing: its tests mount no fixture and check that no request left. Four answers
 were recorded for the tasks: WASDE's release page 1 (``release_find_by_identifier/
 wasde_page1.json``), which the walk of ``list_releases`` crosses into, the October
 2026 WASDE ``.txt`` (``download_release_file/wasde1026_txt.json``), the exchange the
 download replays, and, on 2026-10-28, the WASDE of 2013-08-12
 (``release_find_by_id/95621.json``), whose original and revised files of one format the
-download's choice by ``format`` and ``name`` is tested on, without a download. The
-download is checked by path, size and content type, never by what the file says
-(ADR-0020).
+download's choice by ``format`` and ``name`` is tested on, without a download, and page 1
+of every release (``release_find_all/page1.json``), which the walk of
+``list_recent_releases`` crosses into. The download is checked by path, size and content
+type, never by what the file says (ADR-0020).
 """
 
 import inspect
 import json
 import re
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -67,6 +68,7 @@ from xippios.usda.esmis.models import (
 FIXTURES = Path(__file__).parent / "fixtures"
 API = f"{BASE_URL}/api/v1"
 WASDE_RELEASES = f"{API}/release/findByIdentifier/wasde"
+ALL_RELEASES = f"{API}/release/findAll"
 WASDE_TXT = f"{BASE_URL}/sites/default/release-files/796099/wasde1026.txt"
 FORMATS = {"pdf", "txt", "xls", "xml", "zip"}
 OCTOBER_PRINTED = datetime(2026, 10, 9, 12, 0)
@@ -89,6 +91,11 @@ def recorded[T](type_: type[T], endpoint: str, case: str) -> T:
 
 def releases_of(case: str) -> list[Release]:
     return recorded(ReleaseResults, "release_find_by_identifier", case).results
+
+
+def recent_of(case: str) -> list[Release]:
+    """A recorded page of every release (``esmis_api_release_findAll``)."""
+    return recorded(ReleaseResults, "release_find_all", case).results
 
 
 def printed_date(release: Release) -> date:
@@ -274,11 +281,12 @@ CAPPED_PARAMETERS = {
     "list_publications": ["search", "agency_acronym"],
     "list_releases": ["since", "until", "page"],
     "search_publications": ["page"],
+    "list_recent_releases": ["since", "until", "page"],
 }
 """The tools with a cap of their own, and the parameters each cap's note names."""
 
 
-def test_three_tools_keep_the_default_cap_with_a_note_naming_their_parameters() -> None:
+def test_four_tools_keep_the_default_cap_with_a_note_naming_their_parameters() -> None:
     assert set(tasks.MCP_CAPS) == set(CAPPED_PARAMETERS)
     default = ResultCap()
     for name, named in CAPPED_PARAMETERS.items():
@@ -309,8 +317,16 @@ def test_three_tools_keep_the_default_cap_with_a_note_naming_their_parameters() 
             "showing 5 of 7 rows (cap: 5 rows or 65536 bytes); pass page (0, 1, 2, ...; 25 "
             "publications a page) to see the rest",
         ),
+        (
+            "list_recent_releases",
+            lambda: tasks.list_recent_releases(page=0),
+            ("release_find_all", "page0"),
+            "showing 10 of 25 rows (cap: 10 rows or 65536 bytes); narrow the window with "
+            "since and until (e.g. 2026-10-20), or pass page (0 for the 25 newest catalogued "
+            "releases, then 1, 2, ...) to see the rest",
+        ),
     ],
-    ids=["list_releases", "search_publications"],
+    ids=["list_releases", "search_publications", "list_recent_releases"],
 )
 def test_a_cut_list_carries_its_tools_note(
     replay_fixture: ReplayFixture,
@@ -464,6 +480,144 @@ def test_list_releases_refuses_since_after_until(replay_fixture: ReplayFixture) 
     with pytest.raises(InvalidRequestError, match="since"):
         tasks.list_releases("wasde", since=date(2026, 1, 1), until=date(2025, 1, 1))
     assert sent_urls(route) == []
+
+
+def test_list_recent_releases_one_page(replay_fixture: ReplayFixture) -> None:
+    route = replay_fixture("release_find_all", "page0", match_params=["page"])
+    result = tasks.list_recent_releases(page=0)
+    assert result.data == recent_of("page0")
+    assert len(result.data) == 25
+    ids = [int(release.id) for release in result.data]
+    assert ids == sorted(ids, reverse=True), "the latest catalogued first"
+    assert result.meta.endpoint == "esmis_api_release_findAll"
+    assert result.meta.request == {"page": 0}
+    assert result.meta.total == 1542025, "upstream's count of every release"
+    assert (result.meta.vintage, result.meta.published_at) == (None, None)
+    assert sent_urls(route) == [f"{ALL_RELEASES}?page=0"]
+
+
+def test_list_recent_releases_one_page_keeps_the_printed_dates_between_since_and_until(
+    replay_fixture: ReplayFixture,
+) -> None:
+    route = replay_fixture("release_find_all", "page0", match_params=["page"])
+    since, until = date(2026, 10, 20), date(2026, 10, 22)
+    result = tasks.list_recent_releases(since=since, until=until, page=0)
+    assert [release.id for release in result.data] == [
+        release.id for release in recent_of("page0") if since <= printed_date(release) <= until
+    ]
+    assert len(result.data) == 8
+    assert {printed_date(release) for release in result.data} == {
+        date(2026, 10, 20),
+        date(2026, 10, 21),
+        date(2026, 10, 22),
+    }
+    assert result.meta.request == {"since": since, "until": until, "page": 0}
+    assert result.meta.total == 1542025, "before the date filter"
+    # page given: that page alone, whatever its dates.
+    assert sent_urls(route) == [f"{ALL_RELEASES}?page=0"]
+
+
+def test_list_recent_releases_walks_until_a_page_is_newest_more_than_14_days_before_since(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """The walk goes on past a page whose oldest release is before ``since``.
+
+    The two pages were recorded a day apart, page 0 on 2026-10-27 and page 1 on
+    2026-10-28: three releases catalogued in between moved 796100, 796099 and 796098 from
+    the end of page 0 to the head of page 1, so both pages list them. ``since`` lies after
+    their dates (2026-10-09 and 2026-09-28), so the filter drops them, as it drops every
+    release of page 1.
+    """
+    first = replay_fixture("release_find_all", "page0", match_params=["page"])
+    second = replay_fixture("release_find_all", "page1", match_params=["page"])
+    since = date(2026, 10, 24)
+    result = tasks.list_recent_releases(since=since)
+    walked = recent_of("page0") + recent_of("page1")
+    assert result.data == [release for release in walked if printed_date(release) >= since]
+    assert [release.id for release in result.data] == ["796124"]
+    assert all(printed_date(release) >= since for release in result.data)
+    assert result.meta.endpoint == "esmis_api_release_findAll"
+    assert result.meta.request == {"since": since}
+    assert result.meta.total == 1542028, "page 1's count, the last page fetched"
+    # Page 0's oldest release (2026-09-28) is before since, where list_releases's rule
+    # would stop; its newest (2026-10-26) is not 14 days before since, so the walk goes on.
+    # Page 1's newest (2026-10-09) is 15 days before since: the walk ends there, with no
+    # request for page 2, which no route answers and the plugin refuses.
+    assert sent_urls(first) == [f"{ALL_RELEASES}?page=0"]
+    assert sent_urls(second) == [f"{ALL_RELEASES}?page=1"]
+
+
+@pytest.mark.parametrize(
+    ("case", "since", "last"),
+    [
+        ("page0", date(2026, 11, 9), False),
+        ("page0", date(2026, 11, 10), True),
+        ("page0", date(2026, 10, 10), False),
+        ("page1", date(2026, 10, 23), False),
+        ("page1", date(2026, 10, 24), True),
+    ],
+)
+def test_the_stop_rule_needs_a_page_newest_more_than_14_days_before_since(
+    case: str, since: date, last: bool
+) -> None:
+    """Page 0's newest release is dated 2026-10-26, page 1's 2026-10-09.
+
+    14 days before ``since`` walks on, 15 ends the walk; page 0's release of 2026-09-28,
+    before 2026-10-10, ends nothing.
+    """
+    assert tasks._newest_before(since)(recent_of(case)) is last
+    assert tasks._newest_before(since)([]) is False, "an empty page ends the walk anyway"
+
+
+def test_the_tolerance_covers_the_order_recorded() -> None:
+    """No recorded release is dated more than 14 days before one catalogued earlier."""
+    dated = {
+        int(release.id): printed_date(release)
+        for case in ("page0", "page1")
+        for release in recent_of(case)
+    }
+    gaps = {
+        later: max(
+            (dated[earlier] - dated[later] for earlier in dated if earlier < later),
+            default=timedelta(0),
+        )
+        for later in dated
+    }
+    largest = max(gaps.values())
+    assert largest == timedelta(days=14) == tasks.ORDER_TOLERANCE, "796123 against 796122"
+    assert {later for later, gap in gaps.items() if gap > timedelta(0)} == {796123, 796098}
+    assert gaps[796098] == timedelta(days=9)
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        ({}, "pass since or page: without either"),
+        ({"until": date(2026, 10, 23)}, "pass since or page: until alone bounds nothing"),
+        (
+            {"since": date(2026, 10, 24), "until": date(2026, 10, 20)},
+            "since (2026-10-24) is after until (2026-10-20)",
+        ),
+        (
+            {"since": date(2026, 10, 24), "until": date(2026, 10, 20), "page": 0},
+            "since (2026-10-24) is after until (2026-10-20)",
+        ),
+    ],
+    ids=["neither", "until-alone", "since-after-until", "since-after-until-with-page"],
+)
+def test_list_recent_releases_refuses_before_any_request(
+    respx_mock: respx.MockRouter, arguments: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks.list_recent_releases(**arguments)
+    text = str(caught.value)
+    assert text.startswith(message)
+    assert caught.value.source == SOURCE
+    if "page" not in arguments and "since" not in arguments:
+        assert "1,542,025 releases on 61,681 pages" in text
+        assert "about 34 hours at 30 requests a minute" in text
+        assert "pass since (e.g. 2026-10-20) or page" in text
+    assert respx_mock.calls.call_count == 0, "refused before any request"
 
 
 @pytest.mark.anyio
@@ -651,6 +805,7 @@ def test_a_choice_the_release_cannot_serve_is_refused(
     ("endpoint", "case"),
     [
         ("release_find_all", "page0"),
+        ("release_find_all", "page1"),
         ("release_find_by_id", "796099"),
         ("release_find_by_id", "95621"),
         ("release_find_by_identifier", "wasde_page0"),
@@ -805,7 +960,7 @@ async def test_the_bulk_task_is_no_tool_and_no_route() -> None:
         served = name not in bulk
         assert (tool_name(SOURCE, fn) in tools) is served, name
         assert (f"/{SOURCE}/{name}" in routes) is served, name
-    assert len(tools) == len(routes) == 8
+    assert len(tools) == len(routes) == 9
 
 
 type McpCase = tuple[str, dict[str, Any], list[tuple[str, str]], list[str], Callable[..., bool]]
@@ -853,6 +1008,18 @@ MCP_CASES: list[McpCase] = [
             len(payload["data"]) == 21
             and payload["meta"]["request"]
             == {"publication_identifier": "wasde", "since": "2025-01-01"}
+        ),
+    ),
+    (
+        "list_recent_releases",
+        {"since": "2026-10-20", "page": 0},
+        [("release_find_all", "page0")],
+        [f"{ALL_RELEASES}?page=0"],
+        lambda payload: (
+            len(payload["data"]) == 13
+            and payload["meta"]["endpoint"] == "esmis_api_release_findAll"
+            and payload["meta"]["request"] == {"since": "2026-10-20", "page": 0}
+            and payload["meta"]["total"] == 1542025
         ),
     ),
     (
@@ -930,6 +1097,31 @@ async def test_the_list_publications_tool_refuses_an_unknown_acronym_as_text() -
     text = await mcp_call_text(server, "usda_esmis_list_publications", {"agency_acronym": "ers"})
     assert text.startswith("error: UnknownCode: 'ers' is not an agency_acronym")
     assert "Did you mean ERS (Economic Research Service)?" in text
+
+
+@pytest.mark.anyio
+async def test_the_list_recent_releases_tool_walks_from_since(
+    replay_fixture: ReplayFixture,
+) -> None:
+    first = replay_fixture("release_find_all", "page0", match_params=["page"])
+    second = replay_fixture("release_find_all", "page1", match_params=["page"])
+    payload = await mcp_call(server, "usda_esmis_list_recent_releases", {"since": "2026-10-24"})
+    assert [release["id"] for release in payload["data"]] == ["796124"]
+    assert payload["meta"]["request"] == {"since": "2026-10-24"}
+    assert payload["meta"]["total"] == 1542028
+    assert sent_urls(first) + sent_urls(second) == [
+        f"{ALL_RELEASES}?page=0",
+        f"{ALL_RELEASES}?page=1",
+    ]
+
+
+@pytest.mark.anyio
+async def test_the_list_recent_releases_tool_refuses_a_call_without_since_or_page(
+    respx_mock: respx.MockRouter,
+) -> None:
+    text = await mcp_call_text(server, "usda_esmis_list_recent_releases", {})
+    assert text.startswith("error: InvalidRequestError: pass since or page")
+    assert respx_mock.calls.call_count == 0
 
 
 @pytest.mark.anyio
