@@ -39,18 +39,25 @@ The snapshot in `docs/upstream/` is the reference for names, parameters and sema
   (ADR-0012). A page past the last answers empty `results` with `current_page` clamped
   to the last page. `publication_search` with an empty `query` answers `"pager": []`,
   which `PublicationResults.pager` takes as `()`.
-- **Order**, observed, not documented. `/release/findAll` is creation order, highest id
-  first: the newest created, not the newest released (page 0 of 2026-10-27 runs
-  2026-10-26, 2026-10-09, 2026-10-23, page 1 of 2026-10-28 runs 2026-10-09, 2026-09-28,
-  2026-10-07; 14 days, release 796123 against 796122, is the largest gap recorded).
-  `list_recent_releases` walks that order and takes the gap as its tolerance; its live
-  test checks the id order of page 0 nightly. Within a publication the ids do not
-  follow the dates: WASDE's 96169, 96170 and 96171 are August, July and June 2025, and
-  95482 to 95486 rise while the dates fall; its releases come latest `release_datetime` first, as recorded on its
-  pages 0 and 1 (`release_find_by_identifier/wasde_page0.json`, `wasde_page1.json`).
-  `list_releases` and `get_latest_release` rely on that order and say so in their
-  docstrings; the live test `test_page_zero_of_a_publication_is_newest_first` checks it
-  nightly. Publication lists follow no id order.
+- **Order**, observed, not documented. `/release/findAll` lists the highest id first.
+  Since ESMIS's migration, whose first WASDE release is 791996 of 2025-09-12, the ids
+  follow creation: the newest created first, not the newest released. On findAll's two
+  recorded pages (page 0 of 2026-10-27 runs 2026-10-26, 2026-10-09, 2026-10-23, page 1
+  of 2026-10-28 runs 2026-10-09, 2026-09-28, 2026-10-07) the largest gap between that
+  order and the dates is 14 days, release 796123 against 796122. Below the migration the
+  ids, 96171 and lower for WASDE, do not follow the dates: WASDE's 96165 to 96171 run
+  May, April, March, February, August, July and June 2025, 95482 to 95486 rise while the
+  dates fall, and 95511 (2022-08-12) and 95621 (2013-08-12) sit above 95482
+  (2025-01-10). `list_recent_releases` walks the new ids only: it takes the 14 days as
+  its tolerance (`tasks.ORDER_TOLERANCE`) and refuses a walk from a `since` before
+  2025-09-12 (`tasks.CATALOG_ORDER_SINCE`); the order beyond findAll's two pages is read
+  from the WASDE recordings, not probed, and the live test checks the id order of page 0
+  nightly. Within a publication ESMIS lists the releases latest `release_datetime`
+  first, whatever their ids, as recorded on WASDE's pages 0 and 1
+  (`release_find_by_identifier/wasde_page0.json`, `wasde_page1.json`). `list_releases`
+  and `get_latest_release` rely on that order and say so in their docstrings; the live
+  test `test_page_zero_of_a_publication_is_newest_first` checks it nightly. Publication
+  lists follow no id order.
 - **The publication walk** (2026-10-27, `/publication/findAll` pages 0 to 100, 101
   calls): 2522 publications, ids distinct strings of digits, every `Publication` field
   on all of them but `publication_agency_export_1` (on none). `status`, `subscribable`
@@ -88,24 +95,28 @@ The snapshot in `docs/upstream/` is the reference for names, parameters and sema
   (`page = offset // 25`), bounded by the last answer's `pager.total_pages`, an empty or
   a short page, for `list_releases` the first page whose oldest release is dated before
   `since`, and for `list_recent_releases` the first page whose newest release is dated
-  more than 14 days (`tasks.ORDER_TOLERANCE`) before `since`, as its dates only
-  mostly follow the id order (Order, above); never by the echoed `current_page`.
-  `list_recent_releases` walks only from `since`: a call with neither `since` nor
-  `page`, or with `until` alone, is refused with `InvalidRequestError` before any
-  request, as a walk of every release is 61,681 pages, about 34 hours (decided by
-  Johannes on 2026-10-28; ADR-0007). `list_releases` and `list_recent_releases` filter `since` and
-  `until` on the printed date of `release_datetime`, never converted, and their
-  `meta.total` is upstream's count before that filter. `get_latest_release` takes the
-  latest `release_datetime` of page 0, never the highest id. `meta.request` omits what
-  the caller left `None`. Every tool keeps the default cap (200 rows or 64 KB);
-  `MCP_CAPS` gives four tools a note of their own that names their parameters for seeing
-  the rest (ADR-0016, conventions §8): `list_publications` (next item), and the three
-  the default can cut when called without `page`, `list_releases` (703 rows for WASDE;
-  its note names `since`, `until` and `page`), `list_recent_releases` (about 0.46 KB a
-  release, so after some 140 rows; its note names `since`, `until` and `page`) and a
-  broad `search_publications` (about 1.8 KB a publication, so after some 36 matches; its
-  note names `page`). The notes carry the cap, so the task docstrings, which are the
-  tool descriptions, never state it (sdk-core's handover, "Adopting core 0.3.0").
+  more than 14 days (`tasks.ORDER_TOLERANCE`, the largest gap on findAll's two recorded
+  pages) before `since`, as its dates only mostly follow the id order (Order, above);
+  never by the echoed `current_page`. `list_recent_releases` walks only from a `since`
+  on or after 2025-09-12 (`tasks.CATALOG_ORDER_SINCE`, ESMIS's migration; Order, above):
+  an older `since` without `page` is refused with `InvalidRequestError` before any
+  request, naming `list_releases` and `page`, and so is a call with neither `since` nor
+  `page`, or with `until` alone, as a walk of every release is 61,681 pages, about 34
+  hours (decided by Johannes on 2026-10-28; ADR-0007). With `page` given, `since` and
+  `until` only filter that page, whatever their dates. `list_releases` and
+  `list_recent_releases` filter `since` and `until` on the printed date of
+  `release_datetime`, never converted, and their `meta.total` is upstream's count before
+  that filter. `get_latest_release` takes the latest `release_datetime` of page 0, never
+  the highest id. `meta.request` omits what the caller left `None`. Every tool keeps the
+  default cap (200 rows or 64 KB); `MCP_CAPS` gives four tools a note of their own that
+  names their parameters for seeing the rest (ADR-0016, conventions §8):
+  `list_publications` (next item), and the three the default can cut when called without
+  `page`, `list_releases` (703 rows for WASDE; its note names `since`, `until` and
+  `page`), `list_recent_releases` (about 0.46 KB a release, so after some 140 rows; its
+  note names `since`, `until` and `page`) and a broad `search_publications` (about
+  1.8 KB a publication, so after some 36 matches; its note names `page`). The notes
+  carry the cap, so the task docstrings, which are the tool descriptions, never state it
+  (sdk-core's handover, "Adopting core 0.3.0").
 - **The packaged tables.** `reference/publication.json` (2522 publications, each the
   eight columns of `PublicationRow`, a projection of `Publication`) and
   `reference/agency.json` (9 agencies, every field) are `PackagedList` files, written by
