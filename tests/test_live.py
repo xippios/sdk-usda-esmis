@@ -158,7 +158,10 @@ async def test_download_release_file_live(tmp_path: Path) -> None:
     ``Release.release_files()`` reads without a request.
     """
     latest = await tasks.get_latest_release_async(WASDE)
-    txt = next(file for file in latest.data.release_files() if file.format == "txt")
+    files = latest.data.release_files()
+    txt = next((file for file in files if file.format == "txt"), None)
+    formats = sorted({file.format for file in files})
+    assert txt is not None, f"the latest WASDE release has no txt file; its formats: {formats}"
     dest = tmp_path / "wasde.txt"
     result = await tasks.download_release_file_async(
         int(latest.data.id), "txt", dest, name=txt.name
