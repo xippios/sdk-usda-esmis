@@ -71,10 +71,12 @@ An acronym the packaged agency table lacks raises `UnknownCode`, an
 ```
 
 Tools are read-only and named `usda_esmis_<verb>_<noun>`. Results are capped, at
-200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest;
-`usda_esmis_list_publications` keeps the default and says how to filter: unfiltered, its
-packaged table is about 600 KB, so the tool returns its first 200 rows, while
-`list_publications()` in Python and its HTTP route return the whole table.
+200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest.
+Three tools keep the default with a note naming their own parameters:
+`usda_esmis_list_publications` says how to filter (unfiltered, its packaged table is
+about 600 KB, so the tool returns its first 200 rows, while `list_publications()` in
+Python and its HTTP route return the whole table), `usda_esmis_list_releases` names
+`since`, `until` and `page`, and `usda_esmis_search_publications` names `page`.
 `download_release_file` is no tool and no route: a bulk task, Python only (ADR-0019).
 `--http` serves streamable HTTP instead of stdio.
 
@@ -96,7 +98,7 @@ exactly tasks.__all__. -->
 | `esmis_api_release_findById` | `get_release(release_id)` | `usda_esmis_get_release` | alpha |
 | `esmis_api_release_findByIdentifier`, page 0 | `get_latest_release(publication_identifier)` | `usda_esmis_get_latest_release` | alpha |
 | `esmis_api_release_findById` | `list_release_files(release_id)` | `usda_esmis_list_release_files` | alpha |
-| `esmis_api_release_findById`, then the file | `download_release_file(release_id, format, dest)`, a bulk task | none, Python only | alpha |
+| `esmis_api_release_findById`, then the file | `download_release_file(release_id, format=None, dest=None, *, name=None)`, a bulk task: `dest` required, the file chosen by `format`, `name` or both | none, Python only | alpha |
 
 ## Where the live API deviates from its OpenAPI document (probed 2026-10-27)
 

@@ -8,13 +8,14 @@ fourteen requests in all, paced by the client at 30 a minute. Each task test che
 shape of what ESMIS answers today, never a value that changes with the next release.
 ``list_publications`` sends nothing: its test compares the packaged table's size with
 upstream's count today. The download fetches the current WASDE ``.txt`` alone (about
-120 KB; the nightly budget is one small ``.txt``) into a temporary directory, and checks
-the file's size, never what it says (ADR-0020). Requests: the reachability check 1,
-``list_agencies`` 1, the packaged agency table 1, ``list_publications`` 1 (page 0 of
-``esmis_api_publication_findAll``, for its count), ``search_publications`` 1 (one short
-page), ``get_publication`` 1, ``list_releases`` 1 (page 0), ``get_release`` 1,
-``get_latest_release`` 1, ``list_release_files`` 1, the download 3 (the latest WASDE
-release, the release, the file) and the order check 1.
+120 KB; the nightly budget is one small ``.txt``), named by ``name=`` from the latest
+release's own file list (``Release.release_files()``, no request), into a temporary
+directory, and checks the file's size, never what it says (ADR-0020). Requests: the
+reachability check 1, ``list_agencies`` 1, the packaged agency table 1,
+``list_publications`` 1 (page 0 of ``esmis_api_publication_findAll``, for its count),
+``search_publications`` 1 (one short page), ``get_publication`` 1, ``list_releases`` 1
+(page 0), ``get_release`` 1, ``get_latest_release`` 1, ``list_release_files`` 1, the
+download 3 (the latest WASDE release, the release, the file) and the order check 1.
 """
 
 from datetime import date
@@ -151,14 +152,25 @@ async def test_list_release_files_live() -> None:
 
 
 async def test_download_release_file_live(tmp_path: Path) -> None:
-    """The current WASDE ``.txt``, the nightly budget's one file, into a temporary directory."""
+    """The current WASDE ``.txt``, the nightly budget's one file, into a temporary directory.
+
+    Chosen by ``name`` and ``format`` from the latest release's own file list, which
+    ``Release.release_files()`` reads without a request.
+    """
     latest = await tasks.get_latest_release_async(WASDE)
+    files = latest.data.release_files()
+    txt = next((file for file in files if file.format == "txt"), None)
+    formats = sorted({file.format for file in files})
+    assert txt is not None, f"the latest WASDE release has no txt file; its formats: {formats}"
     dest = tmp_path / "wasde.txt"
-    result = await tasks.download_release_file_async(int(latest.data.id), "txt", dest)
+    result = await tasks.download_release_file_async(
+        int(latest.data.id), "txt", dest, name=txt.name
+    )
     assert result.data.path == dest
     assert result.data.bytes == dest.stat().st_size > 0
     assert (result.data.content_type or "").startswith("text/")
-    assert result.meta.endpoint.endswith(".txt")
-    assert result.meta.request["url"].endswith(f"/{result.meta.endpoint}")
+    assert result.meta.endpoint == txt.name
+    assert result.meta.request["url"] == txt.url
+    assert result.meta.request["name"] == txt.name
     assert result.meta.vintage == latest.data.id
     assert [path.name for path in tmp_path.iterdir()] == ["wasde.txt"]

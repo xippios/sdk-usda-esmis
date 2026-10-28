@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `download_release_file` takes `name=`, keyword only: the file of that name as
+  `list_release_files` prints it, alone or with `format`, which it must then match. A
+  release that keeps an original and a revised file of one format is reached this way:
+  the WASDE of 2013-08-12 (release 95621) lists `ORIGwasde-08-12-2013.xml` before
+  `wasde-08-12-2013.xml`, and `format="xml"` alone takes the first. Neither `format` nor
+  `name`, or a name the release lacks, raises `InvalidRequestError` naming the release's
+  files. Recorded: `tests/fixtures/release_find_by_id/95621.json`.
+- `ReleaseFile.from_url(url)`, the name and format an item of `Release.files` prints,
+  and `Release.release_files()`, a release's files in upstream order, read without a
+  request: the reading `list_release_files` and `download_release_file` use, which the
+  packages that depend on this one call rather than copy.
+
 ### Changed
 
 - Adopted sdk-template v0.3.0, with xippios-core 0.3.0 and conventions 1.22 (conventions §15).
@@ -15,6 +29,19 @@ All notable changes to this project are documented here. The format follows
   refresh opens a PR only when a table changed, and the README's status-table comment,
   which no longer names `tasks_write.__all__` (the template v0.3.0 wording for a
   read-only package).
+- `download_release_file(release_id, format=None, dest=None, *, name=None)`: `format`
+  and `dest` are optional in the signature, so the positional
+  `(release_id, format, dest)` keeps working, and `dest` is required when called.
+  Breaking: a `dest` left `None`, a directory or a path in a missing directory raises
+  `InvalidRequestError` before any request, where a bad `dest` raised core's
+  `ValueError` after the release lookup; `InvalidRequestError` is no `ValueError`, so a
+  caller that caught `ValueError` catches `InvalidRequestError` now. `meta.request`
+  holds `name` when given.
+- The MCP tools `usda_esmis_list_releases` and `usda_esmis_search_publications` keep the
+  default cap, 200 rows or 64 KB, with a note of their own: `list_releases`'s names
+  `since`, `until` and `page`, `search_publications`'s names `page`.
+- The cap's prose left the docstrings of `list_publications`, `search_publications` and
+  `list_releases`, which are the tool descriptions: the cap's notes carry it.
 
 ## [0.1.0] - 2026-10-27
 

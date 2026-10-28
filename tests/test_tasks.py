@@ -5,15 +5,20 @@
 Every task is replayed against the answers recorded for the wrappers on 2026-10-27, and
 every tool but the bulk task is called end to end through the MCP server.
 ``list_publications`` answers from the packaged tables in ``reference/`` and sends
-nothing: its tests mount no fixture and check that no request left. Two answers
+nothing: its tests mount no fixture and check that no request left. Three answers
 were recorded for the tasks: WASDE's release page 1 (``release_find_by_identifier/
-wasde_page1.json``), which the walk of ``list_releases`` crosses into, and the October
+wasde_page1.json``), which the walk of ``list_releases`` crosses into, the October
 2026 WASDE ``.txt`` (``download_release_file/wasde1026_txt.json``), the exchange the
-download replays. The download is checked by path, size and content type, never by what
-the file says (ADR-0020).
+download replays, and, on 2026-10-28, the WASDE of 2013-08-12
+(``release_find_by_id/95621.json``), whose original and revised files of one format the
+download's choice by ``format`` and ``name`` is tested on, without a download. The
+download is checked by path, size and content type, never by what the file says
+(ADR-0020).
 """
 
+import inspect
 import json
+import re
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from importlib import resources
@@ -29,6 +34,7 @@ from xippios.core import (
     InvalidRequestError,
     NotFoundError,
     PackagedList,
+    Result,
     ResultCap,
     UnknownCode,
     UpstreamModel,
@@ -264,6 +270,76 @@ def test_the_python_task_returns_the_whole_table_the_tool_caps() -> None:
     assert cut["note"] == CAP_NOTE
 
 
+CAPPED_PARAMETERS = {
+    "list_publications": ["search", "agency_acronym"],
+    "list_releases": ["since", "until", "page"],
+    "search_publications": ["page"],
+}
+"""The tools with a cap of their own, and the parameters each cap's note names."""
+
+
+def test_three_tools_keep_the_default_cap_with_a_note_naming_their_parameters() -> None:
+    assert set(tasks.MCP_CAPS) == set(CAPPED_PARAMETERS)
+    default = ResultCap()
+    for name, named in CAPPED_PARAMETERS.items():
+        cap = tasks.MCP_CAPS[name]
+        assert (cap.max_rows, cap.max_bytes) == (default.max_rows, default.max_bytes), name
+        assert cap.note is not None
+        parameters = inspect.signature(getattr(tasks, name)).parameters
+        for parameter in named:
+            assert re.search(rf"\b{parameter}\b", cap.note), (name, parameter)
+            assert parameter in parameters, "a note never promises a filter the tool lacks"
+
+
+@pytest.mark.parametrize(
+    ("task", "call", "fixture", "note"),
+    [
+        (
+            "list_releases",
+            lambda: tasks.list_releases("wasde", page=0),
+            ("release_find_by_identifier", "wasde_page0"),
+            "showing 10 of 25 rows (cap: 10 rows or 65536 bytes); bound the release dates "
+            "with since and until (e.g. 2026-01-01), or pass page (0 for the newest 25 "
+            "releases, then 1, 2, ...) to see the rest",
+        ),
+        (
+            "search_publications",
+            lambda: tasks.search_publications("wasde"),
+            ("publication_search", "wasde_page0"),
+            "showing 5 of 7 rows (cap: 5 rows or 65536 bytes); pass page (0, 1, 2, ...; 25 "
+            "publications a page) to see the rest",
+        ),
+    ],
+    ids=["list_releases", "search_publications"],
+)
+def test_a_cut_list_carries_its_tools_note(
+    replay_fixture: ReplayFixture,
+    task: str,
+    call: Callable[[], Result[Any]],
+    fixture: tuple[str, str],
+    note: str,
+) -> None:
+    replay_fixture(*fixture)
+    result = call()
+    rows = int(note.split()[1])
+    cap = ResultCap(max_rows=rows, note=tasks.MCP_CAPS[task].note)
+    cut = json.loads(cap_result(result, cap))
+    assert len(cut["data"]) == rows
+    assert cut["note"] == note
+
+
+@pytest.mark.anyio
+async def test_no_tool_description_states_the_cap() -> None:
+    """The cap's advice is in the notes of ``MCP_CAPS``, never in a tool's description."""
+    tools = {tool.name: tool for tool in await server.list_tools()}
+    for name in tasks.__all__:
+        if name in tasks.BULK_TASKS:
+            continue
+        description = tools[tool_name(SOURCE, getattr(tasks, name))].description or ""
+        for text in ("200 rows", "64 KB", "65536"):
+            assert text not in description, (name, text)
+
+
 def test_search_publications_collects_every_page(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("publication_search", "wasde_page0", match_params=["query", "page"])
     result = tasks.search_publications("wasde")
@@ -462,10 +538,121 @@ def test_list_release_files(replay_fixture: ReplayFixture) -> None:
     assert sent_urls(route) == [f"{API}/release/findById/796099"]
 
 
+AUGUST_2013 = [
+    ("3t945q76s/bk128b299/g732d935k/ORIGwasde-08-12-2013.xls", "xls"),
+    ("3t945q76s/bk128b299/rb68xc267/ORIGwasde-08-12-2013.pdf", "pdf"),
+    ("3t945q76s/bk128b299/4t64gn45n/wasde-08-12-2013.pdf", "pdf"),
+    ("3t945q76s/bk128b299/tx31qj070/ORIGwasde-08-12-2013.xml", "xml"),
+    ("3t945q76s/bk128b299/41687h848/wasde-08-12-2013.xls", "xls"),
+    ("3t945q76s/bk128b299/wm117p338/wasde-08-12-2013.xml", "xml"),
+]
+"""The files of release 95621, the WASDE of 2013-08-12, as recorded: paths under
+``/sites/default/release-files/`` and formats, in upstream order, an original and a
+revised file of each format."""
+AUGUST_2013_LISTING = (
+    "ORIGwasde-08-12-2013.xls (xls), ORIGwasde-08-12-2013.pdf (pdf), "
+    "wasde-08-12-2013.pdf (pdf), ORIGwasde-08-12-2013.xml (xml), "
+    "wasde-08-12-2013.xls (xls), wasde-08-12-2013.xml (xml)"
+)
+"""Release 95621's files as a refusal names them."""
+
+
+def august_2013() -> Release:
+    (release,) = recorded(ReleaseResults, "release_find_by_id", "95621").results
+    return release
+
+
+def august_2013_file(name: str) -> ReleaseFile:
+    (path,) = [path for path, _ in AUGUST_2013 if path.endswith(f"/{name}")]
+    return ReleaseFile.from_url(f"{BASE_URL}/sites/default/release-files/{path}")
+
+
+def test_list_release_files_keeps_an_original_and_a_revised_file_in_upstream_order(
+    replay_fixture: ReplayFixture,
+) -> None:
+    route = replay_fixture("release_find_by_id", "95621")
+    result = tasks.list_release_files(95621)
+    assert result.data == [
+        ReleaseFile(
+            url=f"{BASE_URL}/sites/default/release-files/{path}",
+            name=path.rsplit("/", 1)[-1],
+            format=kind,
+        )
+        for path, kind in AUGUST_2013
+    ]
+    xml = [file.name for file in result.data if file.format == "xml"]
+    assert xml == ["ORIGwasde-08-12-2013.xml", "wasde-08-12-2013.xml"]
+    assert result.meta.vintage == "95621"
+    assert result.meta.published_at == datetime(2013, 8, 12, 12, 0)
+    assert result.meta.published_at_naive
+    assert result.meta.request == {"release_id": 95621}
+    assert sent_urls(route) == [f"{API}/release/findById/95621"]
+
+
+@pytest.mark.parametrize(
+    ("format", "name", "chosen"),
+    [
+        ("xml", None, "ORIGwasde-08-12-2013.xml"),
+        ("pdf", None, "ORIGwasde-08-12-2013.pdf"),
+        (None, "wasde-08-12-2013.xml", "wasde-08-12-2013.xml"),
+        (None, "ORIGwasde-08-12-2013.xls", "ORIGwasde-08-12-2013.xls"),
+        ("xml", "wasde-08-12-2013.xml", "wasde-08-12-2013.xml"),
+        ("xml", "ORIGwasde-08-12-2013.xml", "ORIGwasde-08-12-2013.xml"),
+    ],
+    ids=["format-first-xml", "format-first-pdf", "name", "name-orig", "both", "both-orig"],
+)
+def test_the_file_is_chosen_by_format_name_or_both(
+    format: str | None, name: str | None, chosen: str
+) -> None:
+    assert tasks._select(august_2013(), format, name) == august_2013_file(chosen)
+
+
+@pytest.mark.parametrize(
+    ("format", "name", "message"),
+    [
+        (
+            "pdf",
+            "wasde-08-12-2013.xml",
+            "release 95621's file 'wasde-08-12-2013.xml' has the format 'xml', not 'pdf'; "
+            "pass format='xml' or leave format out",
+        ),
+        (
+            None,
+            "wasde-08-12-2013.txt",
+            f"release 95621 has no file named 'wasde-08-12-2013.txt'; its files: "
+            f"{AUGUST_2013_LISTING}",
+        ),
+        (
+            "xml",
+            "WASDE-08-12-2013.xml",
+            f"release 95621 has no file named 'WASDE-08-12-2013.xml'; its files: "
+            f"{AUGUST_2013_LISTING}",
+        ),
+        (
+            None,
+            None,
+            "name the file of release 95621 to download: pass format, name or both; its "
+            f"files: {AUGUST_2013_LISTING}",
+        ),
+        ("txt", None, "release 95621 has no 'txt' file; its formats: xls, pdf, xml"),
+    ],
+    ids=["name-of-another-format", "unknown-name", "name-as-spelt", "neither", "no-such-format"],
+)
+def test_a_choice_the_release_cannot_serve_is_refused(
+    format: str | None, name: str | None, message: str
+) -> None:
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks._select(august_2013(), format, name)
+    assert str(caught.value) == message
+    assert caught.value.source == SOURCE
+
+
 @pytest.mark.parametrize(
     ("endpoint", "case"),
     [
         ("release_find_all", "page0"),
+        ("release_find_by_id", "796099"),
+        ("release_find_by_id", "95621"),
         ("release_find_by_identifier", "wasde_page0"),
         ("release_find_by_identifier", "wasde_page1"),
         ("release_find_by_pub_id", "1659_page0"),
@@ -473,21 +660,67 @@ def test_list_release_files(replay_fixture: ReplayFixture) -> None:
 )
 def test_every_recorded_file_has_a_name_and_a_known_format(endpoint: str, case: str) -> None:
     for release in recorded(ReleaseResults, endpoint, case).results:
-        files = tasks._files(release)
+        files = release.release_files()
+        assert files == [ReleaseFile.from_url(url) for url in release.files]
         assert [file.url for file in files] == release.files, "verbatim, in upstream order"
         for file in files:
             assert file.url.endswith(f"/{file.name}")
+            assert "/" not in file.name
             assert file.name.endswith(f".{file.format}")
             assert file.format in FORMATS, file.url
 
 
-def test_download_release_file(replay_fixture: ReplayFixture, tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("url", "name", "format"),
+    [
+        (WASDE_TXT, "wasde1026.txt", "txt"),
+        (
+            f"{BASE_URL}/sites/default/release-files/3t945q76s/bk128b299/wm117p338/"
+            "wasde-08-12-2013.xml",
+            "wasde-08-12-2013.xml",
+            "xml",
+        ),
+        (f"{BASE_URL}/sites/default/release-files/1/REPORT.PDF", "REPORT.PDF", "pdf"),
+        (f"{BASE_URL}/sites/default/release-files/1/latest", "latest", ""),
+    ],
+    ids=["recent-path", "hashed-path", "upper-case-extension", "no-extension"],
+)
+def test_release_file_from_url_reads_the_name_and_format(url: str, name: str, format: str) -> None:
+    """The last path segment as printed; its extension lowercased, ``""`` without one."""
+    assert ReleaseFile.from_url(url) == ReleaseFile(url=url, name=name, format=format)
+
+
+type Download = Callable[[Path], Result[Downloaded]]
+"""A call of the download, ``dest`` given."""
+
+DOWNLOADS: list[tuple[Download, dict[str, Any]]] = [
+    (lambda dest: tasks.download_release_file(796099, "txt", dest), {"format": "txt"}),
+    (
+        lambda dest: tasks.download_release_file(796099, dest=dest, name="wasde1026.txt"),
+        {"name": "wasde1026.txt"},
+    ),
+    (
+        lambda dest: tasks.download_release_file(796099, "txt", dest, name="wasde1026.txt"),
+        {"format": "txt", "name": "wasde1026.txt"},
+    ),
+]
+"""The positional call ``(release_id, format, dest)``, ``name`` alone and both, each with
+what ``meta.request`` holds beside the release id and the URL."""
+
+
+@pytest.mark.parametrize(("download", "chosen_by"), DOWNLOADS, ids=["format", "name", "both"])
+def test_download_release_file(
+    replay_fixture: ReplayFixture,
+    tmp_path: Path,
+    download: Download,
+    chosen_by: dict[str, Any],
+) -> None:
     release = replay_fixture("release_find_by_id", "796099")
-    download = replay_fixture("download_release_file", "wasde1026_txt")
+    file = replay_fixture("download_release_file", "wasde1026_txt")
     recorded_file = load_fixture(FIXTURES / "download_release_file" / "wasde1026_txt.json").response
     dest = tmp_path / "wasde1026.txt"
     before = datetime.now(UTC)
-    result = tasks.download_release_file(796099, "txt", dest)
+    result = download(dest)
     after = datetime.now(UTC)
     assert isinstance(result.data, Downloaded)
     assert result.data.path == dest
@@ -497,11 +730,11 @@ def test_download_release_file(replay_fixture: ReplayFixture, tmp_path: Path) ->
     assert result.meta.endpoint == "wasde1026.txt", "the file's name as upstream prints it"
     assert result.meta.vintage == "796099"
     assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
-    assert result.meta.request == {"release_id": 796099, "format": "txt", "url": WASDE_TXT}
+    assert result.meta.request == {"release_id": 796099, **chosen_by, "url": WASDE_TXT}
     assert result.meta.retrieved_at == result.data.retrieved_at
     assert_time_between(result.meta.retrieved_at, before, after)
     assert sent_urls(release) == [f"{API}/release/findById/796099"]
-    assert sent_urls(download) == [WASDE_TXT]
+    assert sent_urls(file) == [WASDE_TXT]
     assert [path.name for path in tmp_path.iterdir()] == ["wasde1026.txt"], "no part file"
 
 
@@ -514,6 +747,49 @@ def test_download_release_file_refuses_a_format_the_release_lacks(
         tasks.download_release_file(796099, "zip", tmp_path / "wasde1026.zip")
     assert str(caught.value) == "release 796099 has no 'zip' file; its formats: pdf, txt, xls, xml"
     assert sent_urls(download) == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_download_release_file_refuses_neither_format_nor_name(
+    replay_fixture: ReplayFixture, tmp_path: Path
+) -> None:
+    release = replay_fixture("release_find_by_id", "796099")
+    download = replay_fixture("download_release_file", "wasde1026_txt")
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks.download_release_file(796099, dest=tmp_path / "wasde1026.txt")
+    assert str(caught.value) == (
+        "name the file of release 796099 to download: pass format, name or both; its files: "
+        "wasde1026.pdf (pdf), wasde1026.txt (txt), wasde1026.xls (xls), wasde1026.xml (xml)"
+    )
+    assert sent_urls(release) == [f"{API}/release/findById/796099"], "the file list"
+    assert sent_urls(download) == []
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("dest", "message"),
+    [
+        (None, "dest is required: name the file to write, e.g. 'wasde1026.txt'"),
+        (".", "dest is a directory; name the file to write"),
+        ("missing/wasde1026.txt", "dest's directory does not exist; create it first"),
+    ],
+    ids=["none", "a-directory", "a-missing-directory"],
+)
+def test_a_bad_dest_is_refused_before_any_request(
+    replay_fixture: ReplayFixture,
+    respx_mock: respx.MockRouter,
+    tmp_path: Path,
+    dest: str | None,
+    message: str,
+) -> None:
+    replay_fixture("release_find_by_id", "796099")
+    replay_fixture("download_release_file", "wasde1026_txt")
+    target = None if dest is None else tmp_path / dest
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks.download_release_file(796099, "txt", target)
+    assert str(caught.value) == message
+    assert caught.value.source == SOURCE
+    assert respx_mock.calls.call_count == 0, "refused before the release is looked up"
     assert list(tmp_path.iterdir()) == []
 
 
