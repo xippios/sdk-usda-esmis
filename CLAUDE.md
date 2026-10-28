@@ -125,9 +125,9 @@ The snapshot in `docs/upstream/` is the reference for names, parameters and sema
   `register_tasks` and `router_from_tasks` (ADR-0019): it streams one file with core's
   `download` to the path the caller names, `meta.endpoint` the file's name as upstream
   prints it; nothing is stored or cached. The download budget: one small file, the
-  current WASDE `.txt` (about 120 KB), for the fixture (`release_files/
-  wasde1026_txt.json`, recorded whole) and for the nightly live test, which writes it
-  to a temporary directory.
+  current WASDE `.txt` (about 120 KB), for the fixture
+  (`download_release_file/wasde1026_txt.json`, recorded whole) and for the nightly live
+  test, which writes it to a temporary directory.
 - **Core.** The package depends on `xippios-core` 0.3.0 from PyPI (`core_version`
   0.3.0, `~=0.3.0`; template v0.3.0), which carries ADR-0019's `download` and
   `BULK_TASKS` skip and ADR-0022's `published_at_naive`.
@@ -161,7 +161,9 @@ scripts/
                          reference/publication.json with PackagedList.write (102 requests)
 tests/
   conftest.py      enables xippios.core.testing.plugin, which keeps the run offline
-  fixtures/        recorded responses, <endpoint>/<case>.json, never hand-written
+  fixtures/        recorded responses, <wrapper>/<case>.json (conventions 1.22 §10),
+                   never hand-written; a recording made through a task sits under the
+                   task's name (download_release_file/)
   test_family.py   core's family check, one line: namespace levels, py.typed, __version__,
                    the adapters serving exactly the tasks, task shapes and docstrings, the
                    README status table, the template tag, the core bound
