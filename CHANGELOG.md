@@ -9,12 +9,12 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 
 - Adopted sdk-template v0.3.0, with xippios-core 0.3.0 and conventions 1.22 (conventions §15).
-- The download's fixture moves to `tests/fixtures/download_release_file/`, the task's
-  name (conventions 1.22 §10), the recording unchanged; the wrappers already carry the
-  verbatim operationId in their docstrings' first line and in `endpoint=` (§2); and the
-  live tests' tolerance docstring now says the packaged tables' refresh opens a PR only
-  when a table changed, and the README's status-table comment no longer names
-  `tasks_write.__all__` (the template v0.3.0 wording for a read-only package).
+- Moved the download's fixture to `tests/fixtures/download_release_file/`, the task's
+  name (conventions 1.22 §10), the recording unchanged.
+- Corrected the live tests' tolerance docstring, which now says the packaged tables'
+  refresh opens a PR only when a table changed, and the README's status-table comment,
+  which no longer names `tasks_write.__all__` (the template v0.3.0 wording for a
+  read-only package).
 
 ## [0.1.0] - 2026-10-27
 
