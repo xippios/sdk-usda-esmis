@@ -10,7 +10,8 @@ What every task follows:
 - ``meta.endpoint`` is the operationId of ``docs/upstream/openapi/esmis_public_api.yaml``
   (``esmis_api_release_findById``); for the download, the file's name as upstream prints
   it (``wasde1026.txt``; ADR-0020, decision 5). ``meta.request`` holds the parameters the
-  caller gave, none left ``None`` (ADR-0022), and for the download also the file's ``url``.
+  caller gave, none left ``None`` (ADR-0022); for the download, the ``release_id``,
+  ``format`` and ``name`` given, never ``dest``, and the chosen file's ``url``.
   ``meta.total`` is ``pager.total_results`` of the last page fetched for the two paged
   list tasks (ADR-0012), ``None`` elsewhere.
   ``meta.retrieved_at`` is when the answer arrived for the tasks that ask upstream: the
@@ -49,7 +50,8 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from os import PathLike
-from urllib.parse import quote, urlsplit
+from pathlib import Path
+from urllib.parse import quote
 
 from xippios.core import (
     Downloaded,
@@ -192,14 +194,76 @@ def _path(prefix: str, value: str) -> str:
     return f"/api/v1/{prefix}/{quote(value, safe='')}"
 
 
-def _files(release: Release) -> list[ReleaseFile]:
-    """The release's ``files``, in upstream order, each with its name and format."""
-    files = []
-    for url in release.files:
-        name = urlsplit(url).path.rsplit("/", 1)[-1]
-        _, dot, extension = name.rpartition(".")
-        files.append(ReleaseFile(url=url, name=name, format=extension.lower() if dot else ""))
-    return files
+def _listing(files: list[ReleaseFile]) -> str:
+    """A release's files for a message, each name with its format, or ``none``."""
+    return ", ".join(f"{file.name} ({file.format or 'no format'})" for file in files) or "none"
+
+
+def _select(release: Release, format: str | None, name: str | None) -> ReleaseFile:
+    """The file of ``release`` to download, chosen by ``name``, ``format`` or both.
+
+    ``name`` alone is the file with that name, as ``ReleaseFile.name`` prints it;
+    ``format`` alone the first file of that format in upstream order; both the named
+    file, which must be of that format. A pure choice on ``Release.release_files()``,
+    without a request.
+
+    Raises:
+        InvalidRequestError: Neither is given, or ``name`` names no file of the release,
+            each naming the release's files; the named file is of another format; or no
+            file is of ``format``, naming the release's formats.
+    """
+    files = release.release_files()
+    if name is not None:
+        chosen = next((file for file in files if file.name == name), None)
+        if chosen is None:
+            raise InvalidRequestError(
+                f"release {release.id} has no file named {name!r}; its files: {_listing(files)}",
+                source=SOURCE,
+            )
+        if format is not None and chosen.format != format:
+            raise InvalidRequestError(
+                f"release {release.id}'s file {name!r} has the format {chosen.format!r}, not "
+                f"{format!r}; pass format={chosen.format!r} or leave format out",
+                source=SOURCE,
+            )
+        return chosen
+    if format is None:
+        raise InvalidRequestError(
+            f"name the file of release {release.id} to download: pass format, name or both; "
+            f"its files: {_listing(files)}",
+            source=SOURCE,
+        )
+    chosen = next((file for file in files if file.format == format), None)
+    if chosen is None:
+        formats = ", ".join(dict.fromkeys(file.format for file in files)) or "none"
+        raise InvalidRequestError(
+            f"release {release.id} has no {format!r} file; its formats: {formats}",
+            source=SOURCE,
+        )
+    return chosen
+
+
+def _target(dest: str | PathLike[str] | None) -> Path:
+    """``dest`` as a path, refused before any request when no file can be written there.
+
+    ``None`` is refused as a missing argument; a directory, or a path whose directory
+    does not exist, with core's own text (``AsyncClient.download``), as the taxonomy's
+    refusal (conventions §5, ADR-0007), so a bad ``dest`` costs no request.
+
+    Raises:
+        InvalidRequestError: ``dest`` is ``None``, a directory, or in a directory that
+            does not exist.
+    """
+    if dest is None:
+        raise InvalidRequestError(
+            "dest is required: name the file to write, e.g. 'wasde1026.txt'", source=SOURCE
+        )
+    target = Path(dest)
+    if target.is_dir():
+        raise InvalidRequestError("dest is a directory; name the file to write", source=SOURCE)
+    if not target.parent.is_dir():
+        raise InvalidRequestError("dest's directory does not exist; create it first", source=SOURCE)
+    return target
 
 
 def _printed(release: Release) -> datetime:
@@ -491,37 +555,11 @@ async def list_release_files_async(release_id: int) -> Result[list[ReleaseFile]]
     One request (``esmis_api_release_findById``): the release's ``files`` in upstream
     order, each with its name as the URL prints it (``"wasde1026.txt"``) and its format,
     the extension lowercased (``"pdf"``, ``"txt"``, ``"xls"``, ``"xml"``, ``"zip"``); one to
-    four per recorded release. The catalog states no size. An id ESMIS does not know
-    raises ``NotFoundError``. ``download_release_file`` fetches a file in Python; no MCP
-    tool downloads. ``meta.vintage`` is the release id. ``meta.published_at`` is the
-    release's ``release_datetime`` as printed with its ``+0000`` dropped, flagged
-    ``published_at_naive``: ESMIS's own calendar puts the release at noon Eastern while
-    the API prints ``+0000``, so the time is upstream's text, never converted.
-
-    Args:
-        release_id: A ``Release.id`` as a number, e.g. ``796099`` (the WASDE of
-            2026-10-09).
-    """
-    release = await _release(release_id)
-    meta = _release_meta(RELEASE, release, {"release_id": release_id})
-    return Result(data=_files(release), meta=meta)
-
-
-async def download_release_file_async(
-    release_id: int, format: str, dest: str | PathLike[str]
-) -> Result[Downloaded]:
-    """Download one file of a release to the path you name, e.g. the TXT of a WASDE.
-
-    A bulk task, Python only: neither the MCP server nor the HTTP router serves it
-    (``BULK_TASKS``). Two requests: the release (``esmis_api_release_findById``), then the
-    first of its files whose format is ``format``, streamed to ``dest`` by core's
-    ``download``, never held in memory and never cached; nothing in it is read. A format
-    the release does not have raises ``InvalidRequestError`` naming the formats it has,
-    an unknown id ``NotFoundError``, and a ``dest`` that is a directory, or whose
-    directory does not exist, ``ValueError`` before the file is requested.
-    ``meta.endpoint`` is the file's name as upstream prints it (``"wasde1026.txt"``),
-    ``meta.vintage`` the release id, ``meta.request`` the release id, the format and the
-    file's URL, and ``meta.retrieved_at`` the time the file was complete.
+    six per recorded release, two of one format where a release keeps an original and a
+    revised file (``ORIGwasde-08-12-2013.xml`` before ``wasde-08-12-2013.xml`` in release
+    95621). The catalog states no size. An id ESMIS does not know raises
+    ``NotFoundError``. ``download_release_file`` fetches a file in Python, by its format
+    or its name; no MCP tool downloads. ``meta.vintage`` is the release id.
     ``meta.published_at`` is the release's ``release_datetime`` as printed with its
     ``+0000`` dropped, flagged ``published_at_naive``: ESMIS's own calendar puts the
     release at noon Eastern while the API prints ``+0000``, so the time is upstream's
@@ -529,22 +567,63 @@ async def download_release_file_async(
 
     Args:
         release_id: A ``Release.id`` as a number, e.g. ``796099`` (the WASDE of
-            2026-10-09).
-        format: The file's format as ``list_release_files`` gives it, the extension in
-            lower case, e.g. ``"txt"``, ``"xls"``, ``"xml"``, ``"pdf"``, ``"zip"``.
-        dest: The file to write, in a directory that exists, e.g. ``"wasde1026.txt"`` or
-            ``Path("reports") / "wasde1026.txt"``; a file there is replaced.
+            2026-10-09), ``95621`` (the WASDE of 2013-08-12).
     """
     release = await _release(release_id)
-    files = _files(release)
-    chosen = next((file for file in files if file.format == format), None)
-    if chosen is None:
-        formats = ", ".join(dict.fromkeys(file.format for file in files)) or "none"
-        raise InvalidRequestError(
-            f"release {release_id} has no {format!r} file; its formats: {formats}",
-            source=SOURCE,
-        )
-    downloaded = await client.download(chosen.url, dest)
+    meta = _release_meta(RELEASE, release, {"release_id": release_id})
+    return Result(data=release.release_files(), meta=meta)
+
+
+async def download_release_file_async(
+    release_id: int,
+    format: str | None = None,
+    dest: str | PathLike[str] | None = None,
+    *,
+    name: str | None = None,
+) -> Result[Downloaded]:
+    """Download one file of a release to the path you name, e.g. the TXT of a WASDE.
+
+    A bulk task, Python only: neither the MCP server nor the HTTP router serves it
+    (``BULK_TASKS``). ``dest`` is checked first: left ``None``, a directory, or in a
+    directory that does not exist, it raises ``InvalidRequestError`` before any request.
+    Then two requests: the release (``esmis_api_release_findById``), and the file chosen
+    from its files as ``list_release_files`` lists them, streamed to ``dest`` by core's
+    ``download``, never held in memory and never cached; nothing in it is read. ``name``
+    alone chooses the file with that name, ``format`` alone the first file of that format
+    in upstream order, and both the named file, which must be of that format. Neither, or
+    a ``name`` the release lacks, raises ``InvalidRequestError`` naming the release's
+    files, a named file of another format one naming its format, and a ``format`` the
+    release lacks one naming its formats, all before the file is requested; an unknown id
+    raises ``NotFoundError``.
+    ``meta.endpoint`` is the file's name as upstream prints it (``"wasde1026.txt"``),
+    ``meta.vintage`` the release id, ``meta.request`` the release id, ``format`` and
+    ``name`` as given, those left ``None`` omitted, and the file's URL, and
+    ``meta.retrieved_at`` the time the file was complete. ``meta.published_at`` is the
+    release's ``release_datetime`` as printed with its ``+0000`` dropped, flagged
+    ``published_at_naive``: ESMIS's own calendar puts the release at noon Eastern while
+    the API prints ``+0000``, so the time is upstream's text, never converted.
+
+    Args:
+        release_id: A ``Release.id`` as a number, e.g. ``796099`` (the WASDE of
+            2026-10-09), ``95621`` (the WASDE of 2013-08-12).
+        format: The file's format as ``list_release_files`` gives it, the extension in
+            lower case, e.g. ``"txt"``, ``"xls"``, ``"xml"``, ``"pdf"``, ``"zip"``: the
+            first file of that format. For release 95621, ``"xml"`` takes
+            ``ORIGwasde-08-12-2013.xml``, the original, listed before the revised
+            ``wasde-08-12-2013.xml``. ``None`` (the default) leaves the choice to ``name``.
+        dest: The file to write, in a directory that exists, e.g. ``"wasde1026.txt"`` or
+            ``Path("reports") / "wasde1026.txt"``; a file there is replaced. Required:
+            its default ``None`` only keeps ``format`` optional before it, and raises
+            ``InvalidRequestError``.
+        name: A file's name as ``list_release_files`` gives it, keyword only, e.g.
+            ``name="wasde-08-12-2013.xml"`` for release 95621, the revised XML, which
+            ``format="xml"`` alone does not reach, or ``name="wasde1026.txt"`` for
+            release 796099. ``None`` (the default) chooses by ``format``.
+    """
+    target = _target(dest)
+    release = await _release(release_id)
+    chosen = _select(release, format, name)
+    downloaded = await client.download(chosen.url, target)
     meta = ResultMeta(
         source=SOURCE,
         endpoint=chosen.name,
@@ -552,7 +631,7 @@ async def download_release_file_async(
         published_at=_printed(release),
         published_at_naive=True,
         vintage=release.id,
-        request={"release_id": release_id, "format": format, "url": chosen.url},
+        request=_request(release_id=release_id, format=format, name=name, url=chosen.url),
     )
     return Result(data=downloaded, meta=meta)
 
