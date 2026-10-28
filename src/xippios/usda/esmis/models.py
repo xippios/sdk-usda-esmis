@@ -12,11 +12,15 @@ schemas are ``Agency``, ``Pager``, ``Publication`` and ``Release`` and whose res
 which wins where it differs from the document (README, "Where the live API deviates from
 its OpenAPI document"): every ``id`` is a JSON string, several of the document's strings
 are arrays, and the list answers carry keys the document does not name. Each model's
-docstring names the fixtures its shape comes from, all recorded on 2026-10-27.
+docstring names the fixtures its shape comes from, recorded on 2026-10-27, and
+``release_find_by_id/95621.json`` on 2026-10-28.
 ``ReleaseFile`` and ``PublicationRow`` are the models the document does not name:
 an item of ``Release.files`` with the name and extension its URL prints, for the file
 tasks, and a projection of ``Publication`` (``UpstreamModel.project``, conventions §3),
 the rows of the packaged publication table that ``list_publications`` answers from.
+``ReleaseFile.from_url`` reads one item and ``Release.release_files`` all of a release's,
+in upstream order: the reading the file tasks use, which the packages that depend on
+this one call rather than copy (ADR-0021).
 
 Every model keeps ``UpstreamModel``'s ``extra="ignore"``: a key upstream sends that a
 model does not name is dropped when parsed, never refused. That is how
@@ -33,6 +37,8 @@ which the document does not list.
 """
 
 from enum import StrEnum
+from typing import Self
+from urllib.parse import urlsplit
 
 from pydantic import AwareDatetime
 from xippios.core import UpstreamModel
@@ -263,17 +269,19 @@ class Release(UpstreamModel):
 
     Shape from ``tests/fixtures/release_find_all/page0.json`` (25 releases, NASS and
     WAOB), ``release_find_by_id/796099.json`` (WASDE of 2026-10-09),
-    ``release_find_by_identifier/wasde_page0.json`` and ``release_find_by_pub_id/
-    1659_page0.json`` (25 WASDE releases each). Where the wire differs from the document
-    (README's deviations): ``id`` is a string and ``files`` are absolute URLs on the same
-    host.
+    ``release_find_by_id/95621.json`` (WASDE of 2013-08-12, an original and a revised
+    file of each format), ``release_find_by_identifier/wasde_page0.json`` and
+    ``release_find_by_pub_id/1659_page0.json`` (25 WASDE releases each). Where the wire
+    differs from the document (README's deviations): ``id`` is a string and ``files`` are
+    absolute URLs on the same host. ``release_files()`` reads ``files`` into
+    ``ReleaseFile`` items, in upstream order, without a request.
 
     Attributes:
         id: ``id``, a string of digits, e.g. ``"796099"``; the ``releaseId`` of
             ``esmis_api_release_findById``.
         files: ``files``, absolute URLs, e.g.
             ``["https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.pdf",
-            ...]``; one to four per recorded release.
+            ...]``; one to six per recorded release.
         title: ``title``, the publication's title, e.g. ``"World Agricultural Supply and
             Demand Estimates"``.
         release_datetime: ``release_datetime``, printed ``YYYY-MM-DDTHH:MM:SS+0000``,
@@ -302,16 +310,28 @@ class Release(UpstreamModel):
     equipment_software: str
     temporal_coverage: str
 
+    def release_files(self) -> list["ReleaseFile"]:
+        """The release's ``files`` in upstream order, each read by ``ReleaseFile.from_url``.
+
+        No request: the name and format come from each URL's text. Release 95621 (WASDE of
+        2013-08-12) gives six, ``ORIGwasde-08-12-2013.xml`` before
+        ``wasde-08-12-2013.xml`` among them; ``list_release_files`` answers this list.
+        """
+        return [ReleaseFile.from_url(url) for url in self.files]
+
 
 class ReleaseFile(UpstreamModel):
     """One file of a release: an item of ``Release.files``, with its name and format.
 
-    Read from the URL's text alone, as upstream prints it; nothing is fetched, decoded or
-    renamed. The catalog states no size, so none is given: a download reports its bytes.
-    Recorded release files are named ``<name>.<extension>`` with the extensions ``pdf``,
-    ``txt``, ``xls``, ``xml`` and ``zip`` (``tests/fixtures/release_find_all/page0.json``,
+    Read from the URL's text alone, as upstream prints it, by ``from_url``; nothing is
+    fetched, decoded or renamed. The catalog states no size, so none is given: a download
+    reports its bytes. Recorded release files are named ``<name>.<extension>`` with the
+    extensions ``pdf``, ``txt``, ``xls``, ``xml`` and ``zip``
+    (``tests/fixtures/release_find_all/page0.json``,
     ``release_find_by_identifier/wasde_page0.json``); a few WASDE releases name a file
-    ``latest.pdf`` or ``wasde0626v2.txt``.
+    ``latest.pdf`` or ``wasde0626v2.txt``, and the WASDE of 2013-08-12 lists an original
+    and a revised file of one format, ``ORIGwasde-08-12-2013.xml`` and
+    ``wasde-08-12-2013.xml`` (``release_find_by_id/95621.json``).
 
     Attributes:
         url: The item of ``Release.files`` verbatim, e.g.
@@ -324,6 +344,22 @@ class ReleaseFile(UpstreamModel):
     url: str
     name: str
     format: str
+
+    @classmethod
+    def from_url(cls, url: str) -> Self:
+        """The file an item of ``Release.files`` links to, read from the URL's text alone.
+
+        The name is the URL path's last segment as printed, the format the name's extension
+        after its last dot, lowercased, ``""`` for a name without one; nothing is fetched.
+
+        Args:
+            url: An item of ``Release.files`` verbatim, e.g.
+                ``"https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.txt"``
+                (name ``"wasde1026.txt"``, format ``"txt"``).
+        """
+        name = urlsplit(url).path.rsplit("/", 1)[-1]
+        _, dot, extension = name.rpartition(".")
+        return cls(url=url, name=name, format=extension.lower() if dot else "")
 
 
 class PublicationResults(UpstreamModel):
