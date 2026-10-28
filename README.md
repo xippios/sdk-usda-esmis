@@ -41,6 +41,9 @@ txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 
 `search_publications("wasde")` finds a publication's identifiers, and
 `list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, newest first.
+`list_recent_releases(since=date(2026, 10, 20))` lists what USDA released across every
+publication since a date, latest catalogued first; it needs `since` or `page`: every
+release of every publication is 61,681 pages, about 34 hours at 30 requests a minute.
 
 `list_publications()` answers from the table of 2522 publications packaged with this
 version, fetched on 2026-10-27, without a request:
@@ -72,11 +75,12 @@ An acronym the packaged agency table lacks raises `UnknownCode`, an
 
 Tools are read-only and named `usda_esmis_<verb>_<noun>`. Results are capped, at
 200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest.
-Three tools keep the default with a note naming their own parameters:
+Four tools keep the default with a note naming their own parameters:
 `usda_esmis_list_publications` says how to filter (unfiltered, its packaged table is
 about 600 KB, so the tool returns its first 200 rows, while `list_publications()` in
-Python and its HTTP route return the whole table), `usda_esmis_list_releases` names
-`since`, `until` and `page`, and `usda_esmis_search_publications` names `page`.
+Python and its HTTP route return the whole table), `usda_esmis_list_releases` and
+`usda_esmis_list_recent_releases` name `since`, `until` and `page`, and
+`usda_esmis_search_publications` names `page`.
 `download_release_file` is no tool and no route: a bulk task, Python only (ADR-0019).
 `--http` serves streamable HTTP instead of stdio.
 
@@ -135,13 +139,15 @@ for names and parameters; the live API answers differently in these points:
   are that the page size is fixed and that a page past the last answers empty results
   with `current_page` clamped;
 - the orders are undocumented: `/release/findAll` comes highest id first, the newest
-  created, with `release_datetime` only mostly in that order (page 0 runs 2026-10-26,
-  2026-10-09, 2026-10-23); a publication's releases (`/release/findByIdentifier`) come
-  latest `release_datetime` first, as recorded on WASDE's pages 0 and 1 (50 releases,
-  2026-10-09 back to 2022-08-12), while their ids do not follow the dates (96169, 96170
-  and 96171 are August, July and June 2025); publication lists follow no id order
-  (`/publication/findAll` page 0: ids 2425, 1801, 1861, 1922;
-  `/publication/search?query=wasde`: 1762, 1831, 1154);
+  created, with `release_datetime` only mostly in that order (page 0 of 2026-10-27 runs
+  2026-10-26, 2026-10-09, 2026-10-23, and page 1 of 2026-10-28 runs 2026-10-09,
+  2026-09-28, 2026-10-07; 14 days, release 796123 against 796122, is the largest gap
+  recorded, which `list_recent_releases` takes as its walk's tolerance); a publication's
+  releases (`/release/findByIdentifier`) come latest `release_datetime` first, as
+  recorded on WASDE's pages 0 and 1 (50 releases, 2026-10-09 back to 2022-08-12), while
+  their ids do not follow the dates (96169, 96170 and 96171 are August, July and June
+  2025); publication lists follow no id order (`/publication/findAll` page 0: ids 2425,
+  1801, 1861, 1922; `/publication/search?query=wasde`: 1762, 1831, 1154);
 - `release_datetime` is `YYYY-MM-DDTHH:MM:SS+0000` (a zone, no colon);
 - `Release.files` paths take two shapes: recent releases use
   `/sites/default/release-files/{release id}/{name}.{ext}`
