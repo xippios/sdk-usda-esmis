@@ -1,11 +1,9 @@
-"""Endpoint wrappers for USDA ESMIS.
+"""Endpoint wrappers, layer 1: one async function per upstream operation (conventions §2).
 
-Layer 1 of ADR-0001: one module per upstream operation, named after it. A wrapper
-takes the parameters as upstream names them (snake_cased), calls
-``xippios.usda.esmis._client.client`` and returns models from ``models.py`` that
-mirror the payload. No composition and no defaults beyond upstream's own. The reference
-is the snapshot in ``docs/upstream/``: ``openapi/esmis_public_api.yaml`` and its twelve
-GET operations.
+``/add-endpoint`` adds them.
+
+The reference is the snapshot in ``docs/upstream/``: ``openapi/esmis_public_api.yaml``
+and its twelve GET operations.
 
 Modules and functions carry the document's ``operationId`` snake_cased without its
 constant ``esmis_api_`` prefix, the API's namespace, which ``xippios.usda.esmis.api``
