@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29
+
+0.2.0 chooses a release's file by its name as well as by its format, makes the reading
+of a release's files public on the models (`ReleaseFile.from_url`,
+`Release.release_files()`) for the packages that depend on this one, and adds
+`list_recent_releases`, what USDA released across every publication since a date. It
+adopts sdk-template v0.3.0 and conventions 1.22, on xippios-core 0.3.0, the core minor
+0.1.0 already required. It is a minor release for two breaking changes:
+`download_release_file` refuses a `dest` left `None`, a directory or a path in a missing
+directory with `InvalidRequestError` before any request, where core's `ValueError` came
+after the release lookup (Changed), and `params.PackagedValues` and
+`params.packaged_values` are gone (Removed). The packaged reference tables were
+refreshed on 2026-10-29 and found unchanged, 9 agencies and 2522 publications as
+packaged on 2026-10-27, so this release ships the tables fetched on 2026-10-27.
+
 ### Added
 
 - `download_release_file` takes `name=`, keyword only: the file of that name as
@@ -58,6 +73,18 @@ All notable changes to this project are documented here. The format follows
   `since`, `until` and `page`, `search_publications`'s names `page`.
 - The cap's prose left the docstrings of `list_publications`, `search_publications` and
   `list_releases`, which are the tool descriptions: the cap's notes carry it.
+
+### Removed
+
+- `params.PackagedValues` and `params.packaged_values`, gone with the adoption of
+  sdk-template v0.3.0, whose `params.py` keeps only `PACKAGED_LISTS`: they read value
+  lists in the `{"param", "fetched", "values"}` files that core 0.3.0's `PackagedList`
+  replaced, and since `PACKAGED_LISTS` was empty, `packaged_values` answered `None` for
+  every name. `params.PACKAGED_LISTS` stays, empty. The two packaged tables are
+  `PackagedList` files that `tasks.py` reads with `PackagedList.load`: a caller reads
+  the publications through `list_publications`, without a request, the agencies through
+  `list_agencies`, which asks upstream, and either table as packaged with
+  `PackagedList.load("xippios.usda.esmis", "publication")` or `"agency"`.
 
 ## [0.1.0] - 2026-10-27
 
