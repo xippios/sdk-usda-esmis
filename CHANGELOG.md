@@ -13,13 +13,14 @@ of a release's files public on the models (`ReleaseFile.from_url`,
 `Release.release_files()`) for the packages that depend on this one, and adds
 `list_recent_releases`, what USDA released across every publication since a date. It
 adopts sdk-template v0.3.0 and conventions 1.22, on xippios-core 0.3.0, the core minor
-0.1.0 already required. It is a minor release for two breaking changes:
+this package's 0.1.0 already required. It is a minor release for two breaking changes:
 `download_release_file` refuses a `dest` left `None`, a directory or a path in a missing
-directory with `InvalidRequestError` before any request, where core's `ValueError` came
-after the release lookup (Changed), and `params.PackagedValues` and
-`params.packaged_values` are gone (Removed). The packaged reference tables were
-refreshed on 2026-10-29 and found unchanged, 9 agencies and 2522 publications as
-packaged on 2026-10-27, so this release ships the tables fetched on 2026-10-27.
+directory with `InvalidRequestError` before any request, where 0.1.0 raised core's
+`ValueError` for a directory or a missing directory after the release lookup (Changed),
+and `params.PackagedValues` and `params.packaged_values` are gone (Removed). The
+packaged reference tables were re-fetched on 2026-10-29 and found unchanged, 9 agencies
+and 2522 publications as packaged on 2026-10-27, so this release ships the tables
+fetched on 2026-10-27.
 
 ### Added
 
