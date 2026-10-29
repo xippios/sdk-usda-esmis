@@ -19,6 +19,22 @@ All notable changes to this project are documented here. The format follows
   and `Release.release_files()`, a release's files in upstream order, read without a
   request: the reading `list_release_files` and `download_release_file` use, which the
   packages that depend on this one call rather than copy.
+- `list_recent_releases(since=None, until=None, page=None)` and its MCP tool
+  `usda_esmis_list_recent_releases`: what USDA released across every ESMIS publication
+  since a date, from `esmis_api_release_findAll`, the one operation that lists releases
+  across every publication. `page` given returns that page, which `since` and `until`
+  only filter; `since` without `page` walks the pages from page 0 and stops after the
+  first page whose newest release is dated more than 14 days before `since`, the largest
+  gap on the operation's two recorded pages between its order (highest id first) and the
+  release dates. `since` and `until` keep the releases whose printed date lies between
+  them. Refused with `InvalidRequestError` before any request: a call with neither
+  `since` nor `page`, or with `until` alone, as the whole list is 1,542,025 releases on
+  61,681 pages (2026-10-27), about 34 hours at 30 requests a minute; and a walk from a
+  `since` before 2025-09-12, the date of the first WASDE release catalogued since
+  ESMIS's migration, below which the ids do not follow the release dates, so a walk
+  could stop early: `list_releases` lists one publication's releases in release order,
+  and `page` reads older pages. The tool keeps the default cap with a note naming
+  `since`, `until` and `page`. Recorded: `tests/fixtures/release_find_all/page1.json`.
 
 ### Changed
 

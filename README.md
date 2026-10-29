@@ -41,6 +41,11 @@ txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 
 `search_publications("wasde")` finds a publication's identifiers, and
 `list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, newest first.
+`list_recent_releases(since=date(2026, 10, 20))` lists what USDA released across every
+publication since a date, latest catalogued first; it needs `since` or `page`: every
+release of every publication is 61,681 pages, about 34 hours at 30 requests a minute.
+A walk from a `since` before 2025-09-12, ESMIS's migration, is refused, as the older
+ids do not follow the release dates; `list_releases` or `page` serves older dates.
 
 `list_publications()` answers from the table of 2522 publications packaged with this
 version, fetched on 2026-10-27, without a request:
@@ -72,11 +77,12 @@ An acronym the packaged agency table lacks raises `UnknownCode`, an
 
 Tools are read-only and named `usda_esmis_<verb>_<noun>`. Results are capped, at
 200 rows or 64 KB unless a tool has a cap of its own, with a note on how to see the rest.
-Three tools keep the default with a note naming their own parameters:
+Four tools keep the default with a note naming their own parameters:
 `usda_esmis_list_publications` says how to filter (unfiltered, its packaged table is
 about 600 KB, so the tool returns its first 200 rows, while `list_publications()` in
-Python and its HTTP route return the whole table), `usda_esmis_list_releases` names
-`since`, `until` and `page`, and `usda_esmis_search_publications` names `page`.
+Python and its HTTP route return the whole table), `usda_esmis_list_releases` and
+`usda_esmis_list_recent_releases` name `since`, `until` and `page`, and
+`usda_esmis_search_publications` names `page`.
 `download_release_file` is no tool and no route: a bulk task, Python only (ADR-0019).
 `--http` serves streamable HTTP instead of stdio.
 
@@ -95,6 +101,7 @@ exactly tasks.__all__. -->
 | `esmis_api_publication_search`, every page unless `page` is given | `search_publications(query, page=None)` | `usda_esmis_search_publications` | alpha |
 | `esmis_api_publication_findByIdentifier` | `get_publication(publication_identifier)` | `usda_esmis_get_publication` | alpha |
 | `esmis_api_release_findByIdentifier`, pages walked newest first unless `page` is given | `list_releases(publication_identifier, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |
+| `esmis_api_release_findAll`, every publication's releases, pages walked from 0 down to `since` (to the first page whose newest release is dated more than 14 days before it) unless `page` is given | `list_recent_releases(since=None, until=None, page=None)`, refused without `since` or `page`, and for a walk from a `since` before 2025-09-12 | `usda_esmis_list_recent_releases` | alpha |
 | `esmis_api_release_findById` | `get_release(release_id)` | `usda_esmis_get_release` | alpha |
 | `esmis_api_release_findByIdentifier`, page 0 | `get_latest_release(publication_identifier)` | `usda_esmis_get_latest_release` | alpha |
 | `esmis_api_release_findById` | `list_release_files(release_id)` | `usda_esmis_list_release_files` | alpha |
@@ -134,11 +141,18 @@ for names and parameters; the live API answers differently in these points:
   are that the page size is fixed and that a page past the last answers empty results
   with `current_page` clamped;
 - the orders are undocumented: `/release/findAll` comes highest id first, the newest
-  created, with `release_datetime` only mostly in that order (page 0 runs 2026-10-26,
-  2026-10-09, 2026-10-23); a publication's releases (`/release/findByIdentifier`) come
-  latest `release_datetime` first, as recorded on WASDE's pages 0 and 1 (50 releases,
-  2026-10-09 back to 2022-08-12), while their ids do not follow the dates (96169, 96170
-  and 96171 are August, July and June 2025); publication lists follow no id order
+  created, for the releases catalogued since ESMIS's migration, whose first WASDE
+  release is 791996 of 2025-09-12, with `release_datetime` only mostly in that order
+  (page 0 of 2026-10-27 runs 2026-10-26, 2026-10-09, 2026-10-23, and page 1 of
+  2026-10-28 runs 2026-10-09, 2026-09-28, 2026-10-07; 14 days, release 796123 against
+  796122, is the largest gap on those two pages, which `list_recent_releases` takes as
+  its walk's tolerance); below the migration the ids do not follow the dates (WASDE's
+  96165 to 96171 run May, April, March, February, August, July and June 2025, and 95511
+  of 2022-08-12 and 95621 of 2013-08-12 sit above 95482 of 2025-01-10), so
+  `list_recent_releases` refuses a walk from a `since` before 2025-09-12; a
+  publication's releases (`/release/findByIdentifier`) come latest `release_datetime`
+  first whatever their ids, as recorded on WASDE's pages 0 and 1 (50 releases,
+  2026-10-09 back to 2022-08-12); publication lists follow no id order
   (`/publication/findAll` page 0: ids 2425, 1801, 1861, 1922;
   `/publication/search?query=wasde`: 1762, 1831, 1154);
 - `release_datetime` is `YYYY-MM-DDTHH:MM:SS+0000` (a zone, no colon);
