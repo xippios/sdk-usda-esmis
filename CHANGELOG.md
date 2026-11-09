@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Adopted sdk-template v0.3.1, with xippios-core 0.3.0 unchanged (conventions §15), no
+  new core minor: `.github/CODEOWNERS` is rendered from the template's new `human`
+  answer and names `@jdidaskalu` as the owner of each human path; `.gitignore` leaves
+  copier's `*.rej` and `*.orig` out; `.claude/family.md`, `/adopt-release`,
+  `/release-prep` and the PR template name no merge class and no auto-merge, as a pull
+  request merges under the rulesets of `main` on the reviewer's approval.
+
 ## [0.2.0] - 2026-10-29
 
 0.2.0 chooses a release's file by its name as well as by its format, makes the reading
