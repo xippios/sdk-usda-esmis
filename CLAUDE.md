@@ -15,7 +15,7 @@ follows, sdk-core's conventions among them, are listed under
 | API base URL | `https://esmis.nal.usda.gov` |
 | Documentation | https://esmis.nal.usda.gov/api-documentation, snapshotted in `docs/upstream/` |
 | Credentials | none; the API is open |
-| Rate limit | 30 requests per minute, burst 1; a self-imposed pace, upstream documents none (ADR-0010); enforced client-side in `_client.py` |
+| Rate limit | 30 requests per minute, burst 1; a self-imposed pace, upstream documents none (sdk-core ADR-0010); enforced client-side in `_client.py` |
 | Write tools | no, this package is read-only |
 
 The snapshot listed in `docs/upstream/FETCHED.md` is the reference for names, parameters and
@@ -82,14 +82,14 @@ CHANGELOG.md       the releases, each section assembled from the fragments
                    tests), organization.yml (the organization's checks from xippios/.github:
                    conventions, a review of a pull request against the documents the README
                    lists, and adr-index, which runs scripts/adr_index.py --check),
-                   siblings.yml (the sibling proof of ADR-0006: this wheel beside the
+                   siblings.yml (the sibling proof of sdk-core ADR-0006: this wheel beside the
                    siblings under xippios.usda, a visible check the ruleset does not require)
 .github/scripts/   check-siblings.sh, which siblings.yml runs; the template's, as is the workflow
 .claude/commands/  add-endpoint, record-fixture, refresh-upstream, refresh-reference-data, release-prep
 ```
 
-The import path is `xippios.usda.esmis` (ADR-0006); `src/xippios/` is a namespace
-package, and so is `src/xippios/usda/`, the provider level.
+The import path is `xippios.usda.esmis` (sdk-core ADR-0006); `src/xippios/` is a
+namespace package, and so is `src/xippios/usda/`, the provider level.
 Where the API's operation ids repeat across its services, `api/` keeps one module per service
 instead, named after the service, and this Layout says so (conventions §2).
 
@@ -108,9 +108,9 @@ uv run xippios-usda-esmis-mcp   # stdio; add --http for streamable HTTP
 ```
 
 `uv run pytest` is offline: core's plugin refuses the network and skips the rate limiter's
-waits in every test not marked `live` (conventions §10, ADR-0013). A test that asserts a
-limiter wait or a quota pause is marked `rate_limited`, one that must reach the network
-`network`.
+waits in every test not marked `live` (conventions §10, sdk-core ADR-0013). A test that
+asserts a limiter wait or a quota pause is marked `rate_limited`, one that must reach the
+network `network`.
 
 `.github/workflows/live.yml` runs the live tests nightly at 01:27 UTC, a time derived from
 the slug, and on demand; a pull request never runs them.
@@ -123,17 +123,18 @@ and counts, never on a raw payload.
 
 ## Code rules
 
-- Three layers (ADR-0001, conventions §2): endpoint wrappers in `api/`, task functions in
-  `tasks.py`, adapters in `mcp.py` and `http.py`. The adapters register `tasks.__all__` and
-  call only tasks, the tasks call only wrappers and reference data, and a wrapper returns
-  models.
+- Three layers (sdk-core ADR-0001, conventions §2): endpoint wrappers in `api/`, task
+  functions in `tasks.py`, adapters in `mcp.py` and `http.py`. The adapters register
+  `tasks.__all__` and call only tasks, the tasks call only wrappers and reference data, and
+  a wrapper returns models.
 - Upstream's documented error shapes go into `classify` in `_client.py`, once, and an error
   class of the package's own into `errors.py`; a wrapper never inspects a status code
   (conventions §5, §6).
 - A change brings its tests, written before the code, and passes the offline checks above;
   its changelog entry is a fragment under `changelog/`, one file holding its bullet, as
   `changelog/README.md` lays it out (conventions §12). Commit subjects follow Conventional
-  Commits (conventions §13).
+  Commits (conventions §13): the rule binds a pull request's own commits, not the commit
+  that lands the pull request on `main`, whose subject GitHub writes.
 - `ruff` leaves `docs/` and `.claude/` alone (`pyproject.toml`), so the upstream snapshot
   keeps its bytes: never reformat it.
 - A convention that seems wrong is followed anyway and said in the pull request; changing
@@ -147,14 +148,14 @@ and counts, never on a raw payload.
   `_REFRESH_TOKEN` or `_SECRET`.
 - Never write a key, a token or another credential into a file or a commit.
 - Never put logic in `mcp.py` or `http.py`, and never add a route or a tool by hand: the
-  adapters register `tasks.__all__` (ADR-0001).
-- Never rename or re-map an upstream concept to another source's (ADR-0003).
+  adapters register `tasks.__all__` (sdk-core ADR-0001).
+- Never rename or re-map an upstream concept to another source's (sdk-core ADR-0003).
 - Never return a documented personal identifier in a task's projection, echo one in
-  `meta.request`, or commit one in a fixture (ADR-0017).
+  `meta.request`, or commit one in a fixture (sdk-core ADR-0017).
 - Never edit `docs/upstream/` by hand: `/refresh-upstream` fetches it, and the pull request
   shows its diff (conventions §3).
 - Never add `src/xippios/__init__.py`, nor an `__init__.py` at a level between it and the
-  package (ADR-0006).
+  package (sdk-core ADR-0006).
 - Never push a tag by hand: a release's tag comes from `publish.yml` alone (conventions §12).
 
 ## Template updates
@@ -193,9 +194,9 @@ semantics or the shape of the public API.
   a string. Release `files` are absolute URLs on the same host.
 - **Pagination.** `page` is 0-based with 25 items a page, a size no documented parameter
   changes; `pager.total_results` is upstream's count, the value for `meta.total`
-  (ADR-0012). A page past the last answers empty `results` with `current_page` clamped
-  to the last page. `publication_search` with an empty `query` answers `"pager": []`,
-  which `PublicationResults.pager` takes as `()`.
+  (sdk-core ADR-0012). A page past the last answers empty `results` with `current_page`
+  clamped to the last page. `publication_search` with an empty `query` answers
+  `"pager": []`, which `PublicationResults.pager` takes as `()`.
 - **Order**, observed, not documented. `/release/findAll` lists the highest id first.
   Since ESMIS's migration, whose first WASDE release is 791996 of 2025-09-12, the ids
   follow creation: the newest created first, not the newest released. On findAll's two
@@ -242,9 +243,9 @@ semantics or the shape of the public API.
   the four tasks about one release (`get_release`, `get_latest_release`,
   `list_release_files`, `download_release_file`) set `meta.published_at` to that time
   with the offset dropped (`.replace(tzinfo=None)`, the printed wall-clock time, never
-  converted) and `published_at_naive=True` (ADR-0022, rule 2); the list tasks leave it
-  empty. `meta.vintage` is the release id.
-- **Tasks.** Ten: eight are the contract of `xippios-usda-wasde` (ADR-0021),
+  converted) and `published_at_naive=True` (sdk-core ADR-0022, rule 2); the list tasks
+  leave it empty. `meta.vintage` is the release id.
+- **Tasks.** Ten: eight are the contract of `xippios-usda-wasde` (sdk-core ADR-0021),
   `list_publications` answers from the packaged table (next item), and
   `list_recent_releases` lists every publication's releases from
   `esmis_api_release_findAll`. A paged task given `page` returns that page; without it,
@@ -259,14 +260,14 @@ semantics or the shape of the public API.
   an older `since` without `page` is refused with `InvalidRequestError` before any
   request, naming `list_releases` and `page`, and so is a call with neither `since` nor
   `page`, or with `until` alone, as a walk of every release is 61,681 pages, about 34
-  hours (decided by Johannes on 2026-10-28; ADR-0007). With `page` given, `since` and
-  `until` only filter that page, whatever their dates. `list_releases` and
+  hours (decided by Johannes on 2026-10-28; sdk-core ADR-0007). With `page` given,
+  `since` and `until` only filter that page, whatever their dates. `list_releases` and
   `list_recent_releases` filter `since` and `until` on the printed date of
   `release_datetime`, never converted, and their `meta.total` is upstream's count before
   that filter. `get_latest_release` takes the latest `release_datetime` of page 0, never
   the highest id. `meta.request` omits what the caller left `None`. Every tool keeps the
   default cap (200 rows or 64 KB); `MCP_CAPS` gives four tools a note of their own that
-  names their parameters for seeing the rest (ADR-0016, conventions §8):
+  names their parameters for seeing the rest (sdk-core ADR-0016, conventions §8):
   `list_publications` (next item), and the three the default can cut when called without
   `page`, `list_releases` (703 rows for WASDE; its note names `since`, `until` and
   `page`), `list_recent_releases` (about 0.46 KB a release, so after some 140 rows; its
@@ -280,14 +281,14 @@ semantics or the shape of the public API.
   `scripts/refresh_reference.py` with `PackagedList.write`, never by hand; `fetched` is
   the UTC time of each table's first request. `list_publications` answers from them
   without a request, `meta` from `PackagedList.meta` (`retrieved_at` the table's
-  `fetched`, `endpoint` `esmis_api_publication_findAll`, ADR-0022), and refuses an
-  `agency_acronym` the agency table lacks with core's `UnknownCode`; `list_agencies`
+  `fetched`, `endpoint` `esmis_api_publication_findAll`, sdk-core ADR-0022), and refuses
+  an `agency_acronym` the agency table lacks with core's `UnknownCode`; `list_agencies`
   stays live. Decided by Johannes on 2026-10-27: its MCP tool keeps the default cap, 200
   rows or 64 KB, with a note naming `search` and `agency_acronym` and that Python and
   HTTP callers get the whole table; unfiltered the result is 599,402 bytes of compact
   JSON, about 150k tokens, so an agent filters it, as with sdk-comtrade's HS list, and is
-  never served it whole (ADR-0016). No enum is generated from the tables (`enums.py`
-  holds none, the document's enums are hand-written in `models.py`) and
+  never served it whole (sdk-core ADR-0016). No enum is generated from the tables
+  (`enums.py` holds none, the document's enums are hand-written in `models.py`) and
   `params.PACKAGED_LISTS` stays empty. The template's `/refresh-reference-data` command
   (v0.3.0) puts a table in the script's `TABLES` and its name in `PACKAGED_LISTS`;
   ESMIS's own script has neither, renders no enum and leaves `PACKAGED_LISTS` empty
@@ -299,29 +300,29 @@ semantics or the shape of the public API.
   Johannes on 2026-10-27); the script refuses to write a walk whose pages disagree.
   The nightly live tests compare the agency table with upstream and the publication
   count within a page.
-- **A catalog, never a parser** (ADR-0020). This package lists publications, releases
-  and their files, and downloads a file; it never parses one. Parser packages such as
-  `xippios-usda-wasde` depend on its tasks and models, never on `api/` or `_client`
-  (ADR-0021). `download_release_file` is its one bulk task, named in `BULK_TASKS`
-  (written by hand, as the template renders it from v0.3.0) and skipped by core's
-  `register_tasks` and `router_from_tasks` (ADR-0019): it streams one file with core's
-  `download` to the path the caller names, `meta.endpoint` the file's name as upstream
-  prints it; nothing is stored or cached. Its signature is `(release_id, format=None,
-  dest=None, *, name=None)`, so the positional `(release_id, format, dest)` that
-  `xippios-usda-wasde` sends keeps working. `dest` is required and checked before any
-  request: `None`, a directory or a path in a missing directory is `InvalidRequestError`,
-  the last two with core's own texts. The file is chosen by `name` alone (the file of
-  that name), `format` alone (the first of that format in upstream order) or both (the
-  named file, which must be of that format); neither, or an unknown name, is
-  `InvalidRequestError` naming the release's files, and a name of another format one
-  naming its format. A release with an original and a revised file of one format (95621,
-  the WASDE of 2013-08-12, lists `ORIGwasde-08-12-2013.xml` before
+- **A catalog, never a parser** (sdk-core ADR-0020). This package lists publications,
+  releases and their files, and downloads a file; it never parses one. Parser packages
+  such as `xippios-usda-wasde` depend on its tasks and models, never on `api/` or
+  `_client` (sdk-core ADR-0021). `download_release_file` is its one bulk task, named in
+  `BULK_TASKS` (written by hand, as the template renders it from v0.3.0) and skipped by
+  core's `register_tasks` and `router_from_tasks` (sdk-core ADR-0019): it streams one
+  file with core's `download` to the path the caller names, `meta.endpoint` the file's
+  name as upstream prints it; nothing is stored or cached. Its signature is `(release_id,
+  format=None, dest=None, *, name=None)`, so the positional `(release_id, format, dest)`
+  that `xippios-usda-wasde` sends keeps working. `dest` is required and checked before
+  any request: `None`, a directory or a path in a missing directory is
+  `InvalidRequestError`, the last two with core's own texts. The file is chosen by `name`
+  alone (the file of that name), `format` alone (the first of that format in upstream
+  order) or both (the named file, which must be of that format); neither, or an unknown
+  name, is `InvalidRequestError` naming the release's files, and a name of another format
+  one naming its format. A release with an original and a revised file of one format
+  (95621, the WASDE of 2013-08-12, lists `ORIGwasde-08-12-2013.xml` before
   `wasde-08-12-2013.xml`) is reached by `name` (decided by Johannes on 2026-10-28). A
   release's files are `Release.release_files()`, `ReleaseFile.from_url` on each URL, in
-  upstream order: the reading a dependent calls rather than copies (ADR-0021). The
-  download budget: one small file, the current WASDE `.txt` (about 120 KB), for the
+  upstream order: the reading a dependent calls rather than copies (sdk-core ADR-0021).
+  The download budget: one small file, the current WASDE `.txt` (about 120 KB), for the
   fixture (`download_release_file/wasde1026_txt.json`, recorded whole) and for the
   nightly live test, which writes it to a temporary directory.
 - **Core.** The package depends on `xippios-core` 0.3.0 from PyPI (`core_version`
-  0.3.0, `~=0.3.0`; template v0.3.0), which carries ADR-0019's `download` and
-  `BULK_TASKS` skip and ADR-0022's `published_at_naive`.
+  0.3.0, `~=0.3.0`; template v0.3.0), which carries sdk-core ADR-0019's `download` and
+  `BULK_TASKS` skip and sdk-core ADR-0022's `published_at_naive`.
