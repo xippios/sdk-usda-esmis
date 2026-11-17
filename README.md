@@ -28,7 +28,7 @@ latest = get_latest_release("wasde")  # the newest WASDE release
 latest.data.id, latest.data.release_datetime  # "796099", 2026-10-09 12:00:00+00:00, as printed
 latest.meta.vintage  # "796099": the release id
 latest.meta.published_at  # 2026-10-09 12:00:00, the printed time without its +0000
-latest.meta.published_at_naive  # True: upstream's text, no zone attached (ADR-0022)
+latest.meta.published_at_naive  # True: upstream's text, no zone attached (sdk-core ADR-0022)
 
 files = list_release_files(int(latest.data.id))
 [file.format for file in files.data]  # ["pdf", "txt", "xls", "xml"]
@@ -83,7 +83,8 @@ about 600 KB, so the tool returns its first 200 rows, while `list_publications()
 Python and its HTTP route return the whole table), `usda_esmis_list_releases` and
 `usda_esmis_list_recent_releases` name `since`, `until` and `page`, and
 `usda_esmis_search_publications` names `page`.
-`download_release_file` is no tool and no route: a bulk task, Python only (ADR-0019).
+`download_release_file` is no tool and no route: a bulk task, Python only
+(sdk-core ADR-0019).
 `--http` serves streamable HTTP instead of stdio.
 
 ## Status
@@ -92,7 +93,7 @@ Python and its HTTP route return the whole table), `usda_esmis_list_releases` an
 heading and the "Task function" column. Each row's Task function cell starts with the
 task's name in backticks, alone or as its call (`get_data(code, year)`); several tasks in
 one row are backticked names separated by commas; prose may follow. The tables list
-exactly tasks.__all__. -->
+exactly tasks.__all__, and tasks_write.__all__ where the package has write tasks. -->
 
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
@@ -178,7 +179,7 @@ for names and parameters; the live API answers differently in these points:
   Eastern wall-clock time (the recorded download of `wasde1026.txt` answers the same
   `Last-Modified`); the tasks keep `release_datetime` as printed, and those about one
   release put its wall-clock time, the `+0000` dropped, into `meta.published_at` with
-  `published_at_naive` set (ADR-0022; CLAUDE.md, release times);
+  `published_at_naive` set (sdk-core ADR-0022; CLAUDE.md, release times);
 - the release calendar page (`docs/upstream/pages/release-calendar.md`) held 3776
   events, drawn from a `publication_upcoming_releases` field (each event's
   `startField`), while the API's `Publication.upcoming_releases` lists 67 upcoming
@@ -195,6 +196,15 @@ USDA National Agricultural Library, ESMIS". The pages the snapshot reads print n
 copyright line, and USDA's policy page is cited in `docs/upstream/FETCHED.md`,
 Attribution. Documentation snapshot: `docs/upstream/`.
 
+## Documents
+
+- sdk-core: [docs/conventions.md](https://github.com/xippios/sdk-core/blob/main/docs/conventions.md) — the conventions every xippios source package follows: its layout, names, results, tests and releases.
+- sdk-core: [docs/adr.md](https://github.com/xippios/sdk-core/blob/main/docs/adr.md) — the index of the family's architecture decisions, which the conventions cite.
+- sdk-core: [docs/definition-of-done.md](https://github.com/xippios/sdk-core/blob/main/docs/definition-of-done.md) — what a change satisfies before its pull request is opened.
+- sdk-core: [docs/review-checklist.md](https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md) — what the review of a pull request checks, in order.
+- sdk-usda-esmis: [docs/adr.md](https://github.com/xippios/sdk-usda-esmis/blob/main/docs/adr.md) — the index of this package's own decisions, generated from the records in `docs/adr/`.
+- sdk-usda-esmis: [docs/upstream/FETCHED.md](https://github.com/xippios/sdk-usda-esmis/blob/main/docs/upstream/FETCHED.md) — the snapshot of the upstream documentation, the reference for names, parameters and semantics.
+
 ## Licence
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/xippios/sdk-usda-esmis/blob/main/LICENSE).
