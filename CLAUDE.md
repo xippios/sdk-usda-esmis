@@ -29,8 +29,7 @@ src/xippios/usda/esmis/
   py.typed         PEP 561 marker; consumers' mypy --strict needs it
   _version.py      __version__ from distribution metadata
   _client.py       the one configured AsyncClient (base URL, rate limit), ENV_VARS and
-                   classify,
-                   upstream's documented error shapes
+                   classify, upstream's documented error shapes
   errors.py        the package's own error classes, where conventions §5 calls for one
   models.py        pydantic models mirroring upstream payloads (UpstreamModel); by the
                    family's precedent also an enumeration written by hand, for a value set
@@ -68,6 +67,8 @@ tests/
   test_live.py     @pytest.mark.live smoke tests, one per task, the release-order check,
                    the packaged agency table against upstream, the current WASDE .txt
                    downloaded into a temporary directory
+  test_refresh_upstream.py   FETCHED.md as the capture script renders it, offline, with
+                   the row of OBSERVED.md, which a snapshot leaves as written
 docs/
   upstream/        documentation snapshot and FETCHED.md
   adr/             this package's design decisions, one NNNN-<slug>.md record each, laid
