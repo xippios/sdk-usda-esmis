@@ -1,10 +1,10 @@
 """The package's one configured ``AsyncClient`` and its error mapping (conventions §6).
 
 The catalog is keyless and sends no rate-limit or quota headers, so the client keeps a
-self-imposed pace and installs no ``QuotaPolicy`` (ADR-0010, ADR-0015). ``classify`` maps
-the catalog's answers to an unknown id and to an identifier carrying ``/`` once
-(ADR-0008); every other answer falls through to core's status mapping, so the endpoint
-wrappers never inspect a status code.
+self-imposed pace and installs no ``QuotaPolicy`` (sdk-core ADR-0033, sdk-core ADR-0037).
+``classify`` maps the catalog's answers to an unknown id and to an identifier carrying
+``/`` once (sdk-core ADR-0031); every other answer falls through to core's status
+mapping, so the endpoint wrappers never inspect a status code.
 """
 
 import httpx
@@ -30,7 +30,8 @@ ENV_VARS: tuple[EnvVar, ...] = ()
 """The variables the package reads, for a host (conventions §7; sdk-core ADR-0026, amendment
 2026-11-18, point c): none, as the API is keyless. An ``EnvVar`` names a variable and reads
 none; a variable the source reads joins the list."""
-# A self-imposed pace: upstream documents no per-second or per-minute limit (ADR-0010 decision 1).
+# A self-imposed pace: upstream documents no per-second or per-minute limit (sdk-core ADR-0033
+# decision 1).
 RATE_LIMIT = RateLimit(per_minute=30, burst=1)
 
 API_PREFIX = "/api/v1/"
@@ -82,7 +83,7 @@ def _slash_refused(response: httpx.Response) -> bool:
 
 
 def classify(response: httpx.Response) -> XippiosError | None:
-    """The catalog's error answers as recorded, mapped once (ADR-0008).
+    """The catalog's error answers as recorded, mapped once (sdk-core ADR-0031).
 
     The OpenAPI document defines one error response, ``ServerError`` ("Internal server
     error."), which no operation references, so the recorded answers are the reference:

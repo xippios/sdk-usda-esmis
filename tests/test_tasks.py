@@ -14,7 +14,7 @@ download replays, and, on 2026-10-28, the WASDE of 2013-08-12
 download's choice by ``format`` and ``name`` is tested on, without a download, and page 1
 of every release (``release_find_all/page1.json``), which the walk of
 ``list_recent_releases`` crosses into. The download is checked by path, size and content
-type, never by what the file says (ADR-0020).
+type, never by what the file says (sdk-core ADR-0020).
 """
 
 import inspect
@@ -139,7 +139,7 @@ def test_list_publications_answers_the_whole_table_without_a_request(
     assert result.data == table.parse(PublicationRow, source=SOURCE), "upstream order"
     assert result.meta.source == SOURCE
     assert result.meta.endpoint == "esmis_api_publication_findAll"
-    assert result.meta.retrieved_at == table.fetched, "the table's fetch time (ADR-0022)"
+    assert result.meta.retrieved_at == table.fetched, "the table's fetch time (sdk-core ADR-0041)"
     assert result.meta.retrieved_at == datetime.fromisoformat(PACKAGED_FETCHED)
     assert result.meta.request == {}, "filters left None are omitted"
     assert (result.meta.vintage, result.meta.published_at, result.meta.total) == (None,) * 3

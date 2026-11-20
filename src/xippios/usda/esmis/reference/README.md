@@ -3,7 +3,7 @@
 Two tables of the ESMIS catalog ship here as packaged lists, versioned with the package,
 each the records of one upstream operation as `scripts/refresh_reference.py` fetched
 them, in the file shape of core's `PackagedList` (`param`, `endpoint`, `fetched`, `note`,
-`records`; conventions §3, ADR-0022):
+`records`; conventions §3, sdk-core ADR-0041):
 
 - `publication.json`: every publication `esmis_api_publication_findAll` lists, a walk of
   all its pages, each record the eight columns of `models.PublicationRow` (`id`,

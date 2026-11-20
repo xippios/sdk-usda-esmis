@@ -2,7 +2,7 @@
 
 ESMIS packages two tables, each the records of one operation, fetched through the
 layer-1 wrappers in ``api/``, never through a task that answers from the package, and
-written with core's ``PackagedList.write`` (conventions §3, ADR-0022):
+written with core's ``PackagedList.write`` (conventions §3, sdk-core ADR-0041):
 
 - ``reference/agency.json``: every agency ``esmis_api_agency_findAll`` answers, with
   every field of ``Agency``, one request;
