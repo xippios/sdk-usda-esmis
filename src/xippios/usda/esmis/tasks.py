@@ -98,10 +98,10 @@ __all__ = [
 ]
 
 BULK_TASKS = frozenset({"download_release_file"})
-"""Tasks the adapters skip (ADR-0019, decision 4): they write a file, which no tool or
-route hands out. Written by hand, as the template renders it from v0.3.0; core's
-``register_tasks`` (which ``build_server`` calls) and ``router_from_tasks`` read it from
-this module and leave its names out, so ``mcp.py`` and ``http.py`` pass ``__all__``
+"""Tasks the adapters skip (sdk-core ADR-0040, decision 4): they write a file, which no tool
+or route hands out. Written by hand, as the template renders it from v0.3.0; core's
+``tool_functions``, whose tasks ``mcp.py``'s ``build()`` serves, and ``router_from_tasks``
+read it from this module and leave its names out, so ``http.py`` passes ``__all__``
 whole."""
 
 # Four tools have an entry, each the family default cap, 200 rows or 64 KB, with a note
@@ -321,9 +321,11 @@ def _select(release: Release, format: str | None, name: str | None) -> ReleaseFi
 def _target(dest: str | PathLike[str] | None) -> Path:
     """``dest`` as a path, refused before any request when no file can be written there.
 
-    ``None`` is refused as a missing argument; a directory, or a path whose directory
-    does not exist, with core's own text (``AsyncClient.download``), as the taxonomy's
-    refusal (conventions §5, ADR-0007), so a bad ``dest`` costs no request.
+    ``None`` is refused as a missing argument. A directory, or a path whose directory
+    does not exist, is refused as core's ``AsyncClient.download`` refuses it, with
+    ``InvalidRequestError`` in its words (conventions §5, sdk-core ADR-0007); core checks
+    when the download starts, after the release lookup, so the check comes first here and
+    a bad ``dest`` costs no request.
 
     Raises:
         InvalidRequestError: ``dest`` is ``None``, a directory, or in a directory that
@@ -494,7 +496,8 @@ async def get_publication_async(publication_identifier: str) -> Result[Publicati
         raise NotFoundError(
             f"ESMIS has no publication with the identifier {publication_identifier!r}: GET "
             f"{_path('publication/findByIdentifier', publication_identifier)} answered no "
-            "result; search_publications finds identifiers by keyword",
+            "result; search_publications (over MCP, the tool usda_esmis_search_publications) "
+            "finds identifiers by keyword",
             source=SOURCE,
         )
     meta = ResultMeta(
@@ -625,9 +628,10 @@ async def list_recent_releases_async(
         raise InvalidRequestError(
             f"since ({since}) is before {CATALOG_ORDER_SINCE}: ESMIS's catalog lists releases "
             f"in an order that follows their release dates only since {CATALOG_ORDER_SINCE}, "
-            "so a walk from an older since could stop early; use list_releases for one "
-            "publication's releases in release order, pass page to read older pages of the "
-            f"catalog, or pass a since on or after {CATALOG_ORDER_SINCE}",
+            "so a walk from an older since could stop early; use list_releases (over MCP, the "
+            "tool usda_esmis_list_releases) for one publication's releases in release order, "
+            "pass page to read older pages of the catalog, or pass a since on or after "
+            f"{CATALOG_ORDER_SINCE}",
             source=SOURCE,
         )
     request = _request(since=since, until=until, page=page)
@@ -705,7 +709,8 @@ async def get_latest_release_async(publication_identifier: str) -> Result[Releas
         raise NotFoundError(
             f"ESMIS lists no release for the identifier {publication_identifier!r}: GET "
             f"{_path('release/findByIdentifier', publication_identifier)} answered no "
-            "result; search_publications finds identifiers by keyword",
+            "result; search_publications (over MCP, the tool usda_esmis_search_publications) "
+            "finds identifiers by keyword",
             source=SOURCE,
         )
     latest = max(answer.results, key=lambda release: release.release_datetime)

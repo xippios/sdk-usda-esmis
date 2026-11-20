@@ -11,10 +11,12 @@ import httpx
 from xippios.core import (
     AsyncClient,
     ClientConfig,
+    EnvVar,
     InvalidRequestError,
     NotFoundError,
     RateLimit,
     XippiosError,
+    request_description,
 )
 
 from xippios.usda.esmis._version import __version__
@@ -24,6 +26,10 @@ BASE_URL = "https://esmis.nal.usda.gov"
 """The host root; every catalog path keeps its ``/api/v1/`` prefix, as the OpenAPI
 document's ``paths`` name it (its one server is ``https://esmis.nal.usda.gov``)."""
 API_KEY_ENV: str | None = None
+ENV_VARS: tuple[EnvVar, ...] = ()
+"""The variables the package reads, for a host (conventions §7; sdk-core ADR-0026, amendment
+2026-11-18, point c): none, as the API is keyless. An ``EnvVar`` names a variable and reads
+none; a variable the source reads joins the list."""
 # A self-imposed pace: upstream documents no per-second or per-minute limit (ADR-0010 decision 1).
 RATE_LIMIT = RateLimit(per_minute=30, burst=1)
 
@@ -121,7 +127,7 @@ def classify(response: httpx.Response) -> XippiosError | None:
     message = _upstream_message(response)
     detail = f": {message}" if message else ""
     return NotFoundError(
-        f"ESMIS has no record at {request.method} {path} (HTTP 404{detail})",
+        f"ESMIS has no record at {request_description(response)} (HTTP 404{detail})",
         source=SOURCE,
     )
 
@@ -140,6 +146,7 @@ __all__ = [
     "API_KEY_ENV",
     "API_PREFIX",
     "BASE_URL",
+    "ENV_VARS",
     "RATE_LIMIT",
     "SOURCE",
     "classify",
