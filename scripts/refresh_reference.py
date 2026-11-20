@@ -55,12 +55,7 @@ PROVENANCE = re.compile(r"(\| File \| Origin \| Fetched \|\n\| --- \| --- \| ---
 
 
 class Refused(Exception):
-    """A walk the script will not write; ``main`` exits with its message.
-
-    An ``Exception``, never ``SystemExit``: raised inside the coroutine that core's
-    ``sync`` runs on its background loop, a ``SystemExit`` stops that loop's thread and
-    leaves the caller waiting for ever.
-    """
+    """A walk the script will not write; ``main`` exits with its message."""
 
 
 async def agencies() -> PackagedList:
