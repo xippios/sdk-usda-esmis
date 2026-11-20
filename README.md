@@ -108,84 +108,6 @@ exactly tasks.__all__, and tasks_write.__all__ where the package has write tasks
 | `esmis_api_release_findById` | `list_release_files(release_id)` | `usda_esmis_list_release_files` | alpha |
 | `esmis_api_release_findById`, then the file | `download_release_file(release_id, format=None, dest=None, *, name=None)`, a bulk task: `dest` required, the file chosen by `format`, `name` or both | none, Python only | alpha |
 
-## Where the live API deviates from its OpenAPI document (probed 2026-10-27)
-
-The OpenAPI document in `docs/upstream/openapi/esmis_public_api.yaml` is the reference
-for names and parameters; the live API answers differently in these points:
-
-- every `id` is a JSON string, not an integer; the walk of every `/publication/findAll`
-  page on 2026-10-27 (pages 0 to 100) found 2522 publications with distinct ids, each a
-  string of digits;
-- `Publication.agency`, `.identifier` and `.agency_acronym` are arrays, not strings;
-- `agency_acronym` is absent on the publications the four other publication operations
-  answer, which carry `publication_agency_export_1` instead; `/publication/findAll`
-  carried `agency_acronym` on all 2522 publications of the walk and
-  `publication_agency_export_1` on none;
-- `Publication.frequency` printed `""` on one publication of the walk (1172), a value
-  the document's enumeration does not list; `status`, `subscribable` and
-  `resource_type` held only the document's values;
-- the list wrapper has `filters`, `sorters` and `system` (`{"page_key": "page"}`)
-  beside `pager` and `results`;
-- `/publication/search` without `query`, or with an empty one, answers 200 with
-  `"pager": []` and empty results, although the document makes `query` required;
-- absence answers differ per lookup, as recorded: an unknown id answers 404
-  `{"message": ""}` at `/agency/findById`, `/publication/findById`, `/release/findById`
-  and `/release/findByPubId`; an unknown name answers 200 with nothing,
-  `/agency/findByAcronym` an empty array, `/publication/findByAgency`,
-  `/publication/findByIdentifier` and `/release/findByIdentifier` empty results with
-  every pager count 0;
-- an identifier carrying `/` (`Market and Trade Economics Division/FDS`) cannot be
-  looked up: the web server answers `%2F` in a path with its own HTML 404, and a raw
-  slash is no route; every publication recorded with such an identifier has another
-  without it (`FDS`);
-- `page` is 0-based and a page holds 25 items, as the YAML's defaults say; undocumented
-  are that the page size is fixed and that a page past the last answers empty results
-  with `current_page` clamped;
-- the orders are undocumented: `/release/findAll` comes highest id first, the newest
-  created, for the releases catalogued since ESMIS's migration, whose first WASDE
-  release is 791996 of 2025-09-12, with `release_datetime` only mostly in that order
-  (page 0 of 2026-10-27 runs 2026-10-26, 2026-10-09, 2026-10-23, and page 1 of
-  2026-10-28 runs 2026-10-09, 2026-09-28, 2026-10-07; 14 days, release 796123 against
-  796122, is the largest gap on those two pages, which `list_recent_releases` takes as
-  its walk's tolerance); below the migration the ids do not follow the dates (WASDE's
-  96165 to 96171 run May, April, March, February, August, July and June 2025, and 95511
-  of 2022-08-12 and 95621 of 2013-08-12 sit above 95482 of 2025-01-10), so
-  `list_recent_releases` refuses a walk from a `since` before 2025-09-12; a
-  publication's releases (`/release/findByIdentifier`) come latest `release_datetime`
-  first whatever their ids, as recorded on WASDE's pages 0 and 1 (50 releases,
-  2026-10-09 back to 2022-08-12); publication lists follow no id order
-  (`/publication/findAll` page 0: ids 2425, 1801, 1861, 1922;
-  `/publication/search?query=wasde`: 1762, 1831, 1154);
-- `release_datetime` is `YYYY-MM-DDTHH:MM:SS+0000` (a zone, no colon);
-- `Release.files` paths take two shapes: recent releases use
-  `/sites/default/release-files/{release id}/{name}.{ext}`
-  (`/sites/default/release-files/796099/wasde1026.txt`), older ones the hashed
-  three-segment path the YAML's example shows
-  (`/sites/default/release-files/8336h188j/2514qk05k/j0991c960/prog3925.pdf`);
-- `Publication.upcoming_releases` is `[]` on most publications: the walk found items on
-  24 of 2522, 67 in all, each printed with an Eastern offset
-  (`2026-10-28T15:00:00-0400` and `2026-11-04T15:00:00-0500` for publication 1863),
-  where `release_datetime` prints `+0000`; the YAML lists no release-calendar operation;
-- the zone label of release times: the API prints `release_datetime` with `+0000` and
-  the release page its `datetime` with `Z` (`2026-10-09T12:00:00+0000` and
-  `datetime="2026-10-09T12:00:00Z"` for the October 2026 WASDE), while the release
-  calendar, whose settings say `timeZone: "America/New_York"`, puts the WASDE releases
-  that `/release/findByIdentifier/wasde` (page 0) prints as `2025-09-12T12:00:00+0000`
-  and `2025-12-09T12:00:00+0000` at `2025-09-12T12:00:00-04:00` and
-  `2025-12-09T12:00:00-05:00`, and the October release's own file answers
-  `HEAD /sites/default/release-files/796099/wasde1026.txt` with
-  `Last-Modified: Fri, 09 Oct 2026 16:01:00 GMT`, 12:01 Eastern. The `+0000`/`Z` label
-  is contradicted by upstream's own calendar and file timestamps, which fit a noon
-  Eastern wall-clock time (the recorded download of `wasde1026.txt` answers the same
-  `Last-Modified`); the tasks keep `release_datetime` as printed, and those about one
-  release put its wall-clock time, the `+0000` dropped, into `meta.published_at` with
-  `published_at_naive` set (sdk-core ADR-0041, decision 2; CLAUDE.md, release times);
-- the release calendar page (`docs/upstream/pages/release-calendar.md`) held 3776
-  events, drawn from a `publication_upcoming_releases` field (each event's
-  `startField`), while the API's `Publication.upcoming_releases` lists 67 upcoming
-  releases on 24 publications; every calendar event is classed `fc-event-past`, future
-  ones included, and WASDE's events stop at 2025-12-09.
-
 ## Upstream terms and attribution
 
 Data comes from USDA ESMIS (https://esmis.nal.usda.gov) under its own terms of use;
@@ -204,6 +126,7 @@ Attribution. Documentation snapshot: `docs/upstream/`.
 - sdk-core: [docs/review-checklist.md](https://github.com/xippios/sdk-core/blob/main/docs/review-checklist.md) — what the review of a pull request checks, in order.
 - sdk-usda-esmis: [docs/adr.md](https://github.com/xippios/sdk-usda-esmis/blob/main/docs/adr.md) — the index of this package's own decisions, generated from the records in `docs/adr/`.
 - sdk-usda-esmis: [docs/upstream/FETCHED.md](https://github.com/xippios/sdk-usda-esmis/blob/main/docs/upstream/FETCHED.md) — the snapshot of the upstream documentation, the reference for names, parameters and semantics.
+- sdk-usda-esmis: [docs/upstream/OBSERVED.md](https://github.com/xippios/sdk-usda-esmis/blob/main/docs/upstream/OBSERVED.md) — what the live API does that its documentation does not state, where it answers otherwise above all, each note with the probe that showed it.
 
 ## Licence
 

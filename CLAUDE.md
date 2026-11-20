@@ -69,8 +69,11 @@ tests/
                    downloaded into a temporary directory
   test_refresh_upstream.py   FETCHED.md as the capture script renders it, offline, with
                    the row of OBSERVED.md, which a snapshot leaves as written
+  test_observed.py docs/upstream/OBSERVED.md as committed: its row in FETCHED.md, a probe
+                   ending every note, and the fixtures the notes cite
 docs/
-  upstream/        documentation snapshot and FETCHED.md
+  upstream/        documentation snapshot, FETCHED.md, and OBSERVED.md, the notes written by
+                   hand on what upstream does but never documents
   adr/             this package's design decisions, one NNNN-<slug>.md record each, laid
                    out in its README.md
   adr.md           the index of the decisions, written by scripts/adr_index.py, never by hand
@@ -194,8 +197,8 @@ semantics or the shape of the public API.
 
 - **Reference.** `docs/upstream/openapi/esmis_public_api.yaml` (OpenAPI 3.0.0, twelve
   GET operations) is the reference for operation names, paths, parameters and schema
-  names. Where the live API answers differently, the wire wins for types; README's
-  section "Where the live API deviates from its OpenAPI document" lists the differences,
+  names. Where the live API answers differently, the wire wins for types;
+  `docs/upstream/OBSERVED.md` lists the differences, each with the probe that showed it,
   and `models.py` and `tests/fixtures/` show them.
 - **Wrappers.** Every operation sits under `/api/v1/` on `https://esmis.nal.usda.gov`. A
   module and its function are the operationId snake_cased without the constant
@@ -248,7 +251,8 @@ semantics or the shape of the public API.
   `InvalidRequestError`, and a raw slash is no route; the publications recorded with one
   carry another identifier without it (`FDS`).
 - **Release times.** The API prints `release_datetime` with `+0000`, but upstream's own
-  calendar and file times put the release at noon Eastern (README, the zone-label item),
+  calendar and file times put the release at noon Eastern (`docs/upstream/OBSERVED.md`,
+  the zone label of release times),
   and `Publication.upcoming_releases` print Eastern offsets (`2026-10-28T15:00:00-0400`,
   `2026-11-04T15:00:00-0500`), which the model keeps. Decided by Johannes on 2026-10-27:
   `Release.release_datetime` keeps the time as printed, an aware datetime at `+00:00`;

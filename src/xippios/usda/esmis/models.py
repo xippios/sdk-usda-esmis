@@ -9,8 +9,8 @@ contacts.
 The reference for names is ``docs/upstream/openapi/esmis_public_api.yaml``, whose
 schemas are ``Agency``, ``Pager``, ``Publication`` and ``Release`` and whose responses are
 ``AgencyResults``, ``PublicationResults`` and ``ReleaseResults``. Types follow the wire,
-which wins where it differs from the document (README, "Where the live API deviates from
-its OpenAPI document"): every ``id`` is a JSON string, several of the document's strings
+which wins where it differs from the document (``docs/upstream/OBSERVED.md``, each
+difference with its probe): every ``id`` is a JSON string, several of the document's strings
 are arrays, and the list answers carry keys the document does not name. Each model's
 docstring names the fixtures its shape comes from, recorded on 2026-10-27, and
 ``release_find_by_id/95621.json`` on 2026-10-28.
