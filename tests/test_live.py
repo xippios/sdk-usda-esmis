@@ -10,7 +10,7 @@ shape of what ESMIS answers today, never a value that changes with the next rele
 upstream's count today. The download fetches the current WASDE ``.txt`` alone (about
 120 KB; the nightly budget is one small ``.txt``), named by ``name=`` from the latest
 release's own file list (``Release.release_files()``, no request), into a temporary
-directory, and checks the file's size, never what it says (ADR-0020). Requests: the
+directory, and checks the file's size, never what it says (sdk-core ADR-0020). Requests: the
 reachability check 1, ``list_agencies`` 1, the packaged agency table 1,
 ``list_publications`` 1 (page 0 of ``esmis_api_publication_findAll``, for its count),
 ``search_publications`` 1 (one short page), ``get_publication`` 1, ``list_releases`` 1

@@ -14,7 +14,7 @@ download replays, and, on 2026-10-28, the WASDE of 2013-08-12
 download's choice by ``format`` and ``name`` is tested on, without a download, and page 1
 of every release (``release_find_all/page1.json``), which the walk of
 ``list_recent_releases`` crosses into. The download is checked by path, size and content
-type, never by what the file says (ADR-0020).
+type, never by what the file says (sdk-core ADR-0020).
 """
 
 import inspect
@@ -51,8 +51,9 @@ from xippios.core.testing import (
     sent_urls,
 )
 
-from xippios.usda.esmis import tasks
-from xippios.usda.esmis._client import BASE_URL, SOURCE
+from xippios.usda.esmis import _client, tasks
+from xippios.usda.esmis import mcp as esmis_mcp
+from xippios.usda.esmis._client import BASE_URL, SOURCE, client
 from xippios.usda.esmis.http import router
 from xippios.usda.esmis.mcp import server
 from xippios.usda.esmis.models import (
@@ -80,7 +81,12 @@ counts them; a refresh of the table updates both."""
 PACKAGED_FETCHED = "2026-10-27T17:24:48Z"
 """The publication table's ``fetched``, as written."""
 FILE_KEYS = {"param", "endpoint", "fetched", "note", "records"}
-"""The keys a packaged file may hold (ADR-0022, amendment point 8)."""
+"""The keys a packaged file may hold (sdk-core ADR-0041, decision 5)."""
+SEARCH_BY_KEYWORD = (
+    "search_publications (over MCP, the tool usda_esmis_search_publications) finds "
+    "identifiers by keyword"
+)
+"""How a refusal of an unknown identifier names the task to call instead (conventions §8)."""
 
 
 def recorded[T](type_: type[T], endpoint: str, case: str) -> T:
@@ -133,7 +139,7 @@ def test_list_publications_answers_the_whole_table_without_a_request(
     assert result.data == table.parse(PublicationRow, source=SOURCE), "upstream order"
     assert result.meta.source == SOURCE
     assert result.meta.endpoint == "esmis_api_publication_findAll"
-    assert result.meta.retrieved_at == table.fetched, "the table's fetch time (ADR-0022)"
+    assert result.meta.retrieved_at == table.fetched, "the table's fetch time (sdk-core ADR-0041)"
     assert result.meta.retrieved_at == datetime.fromisoformat(PACKAGED_FETCHED)
     assert result.meta.request == {}, "filters left None are omitted"
     assert (result.meta.vintage, result.meta.published_at, result.meta.total) == (None,) * 3
@@ -406,6 +412,7 @@ def test_get_publication_unknown_is_not_found(replay_fixture: ReplayFixture) -> 
     message = str(caught.value)
     assert "'xippios-no-such-identifier'" in message
     assert "GET /api/v1/publication/findByIdentifier/xippios-no-such-identifier" in message
+    assert message.endswith(SEARCH_BY_KEYWORD), "names the task and its tool (conventions §8)"
     assert BASE_URL not in message, "a message names the path, never the host"
 
 
@@ -660,7 +667,10 @@ def test_list_recent_releases_refuses_before_any_request(
         assert "about 34 hours at 30 requests a minute" in text
         assert "pass since (e.g. 2026-10-20) or page" in text
     if message.endswith("is before 2025-09-12"):
-        assert "use list_releases for one publication's releases in release order" in text
+        assert (
+            "use list_releases (over MCP, the tool usda_esmis_list_releases) for one "
+            "publication's releases in release order"
+        ) in text, "names the task and its tool (conventions §8)"
         assert "pass page to read older pages" in text
     assert respx_mock.calls.call_count == 0, "refused before any request"
 
@@ -727,8 +737,9 @@ def test_get_latest_release(replay_fixture: ReplayFixture) -> None:
 
 def test_get_latest_release_unknown_is_not_found(replay_fixture: ReplayFixture) -> None:
     replay_fixture("release_find_by_identifier", "unknown")
-    with pytest.raises(NotFoundError, match="'nope-nope'"):
+    with pytest.raises(NotFoundError, match="'nope-nope'") as caught:
         tasks.get_latest_release("nope-nope")
+    assert str(caught.value).endswith(SEARCH_BY_KEYWORD), "the task and its tool (§8)"
 
 
 def test_list_release_files(replay_fixture: ReplayFixture) -> None:
@@ -1006,6 +1017,26 @@ def test_a_bad_dest_is_refused_before_any_request(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("dest", [".", "missing/wasde1026.txt"], ids=["a-directory", "a-missing"])
+async def test_a_bad_dest_is_refused_as_core_refuses_it(
+    respx_mock: respx.MockRouter, tmp_path: Path, dest: str
+) -> None:
+    """The task's refusal of a directory or a missing directory is core's ``download``'s.
+
+    Core refuses both with ``InvalidRequestError`` before anything is sent, but only once
+    the task has spent the release lookup, so the task checks first, in core's words.
+    """
+    with pytest.raises(InvalidRequestError) as by_core:
+        await client.download(WASDE_TXT, tmp_path / dest)
+    with pytest.raises(InvalidRequestError) as by_task:
+        await tasks.download_release_file_async(796099, "txt", tmp_path / dest)
+    assert str(by_task.value) == str(by_core.value)
+    assert by_task.value.source == by_core.value.source == SOURCE
+    assert respx_mock.calls.call_count == 0
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.anyio
 async def test_the_bulk_task_is_no_tool_and_no_route() -> None:
     bulk = tasks.BULK_TASKS
     assert bulk == {"download_release_file"}
@@ -1193,6 +1224,22 @@ async def test_a_tool_reports_not_found_as_text(replay_fixture: ReplayFixture) -
         {"publication_identifier": "xippios-no-such-identifier"},
     )
     assert text.startswith("error: NotFoundError: ESMIS has no publication")
+
+
+def test_the_package_reads_no_variable() -> None:
+    """``ENV_VARS``, the list a host reads beside ``SOURCE``, is empty: the API is keyless."""
+    assert _client.ENV_VARS == ()
+    assert "ENV_VARS" in _client.__all__
+    assert esmis_mcp.ENV_VARS is _client.ENV_VARS
+
+
+def test_build_is_the_tool_set_the_server_serves() -> None:
+    """A host serves ``build()`` as the entry point does: every task but the bulk one."""
+    tools = esmis_mcp.build()
+    served = [name for name in tasks.__all__ if name not in tasks.BULK_TASKS]
+    assert [task.__name__ for task in tools.tasks] == served
+    assert tools.source == SOURCE
+    assert dict(tools.caps) == dict(tasks.MCP_CAPS)
 
 
 def test_every_task_is_tested_through_the_mcp_server_or_is_bulk() -> None:

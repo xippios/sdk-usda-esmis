@@ -3,24 +3,25 @@
 ``/add-endpoint`` adds them.
 
 The tasks are the contract of the parser packages that depend on this one: such a
-package imports these tasks and ``models``, never ``api/`` or ``_client`` (ADR-0021).
+package imports these tasks and ``models``, never ``api/`` or ``_client`` (sdk-core ADR-0021).
 
 What every task follows:
 
 - ``meta.endpoint`` is the operationId of ``docs/upstream/openapi/esmis_public_api.yaml``
   (``esmis_api_release_findById``); for the download, the file's name as upstream prints
-  it (``wasde1026.txt``; ADR-0020, decision 5). ``meta.request`` holds the parameters the
-  caller gave, none left ``None`` (ADR-0022); for the download, the ``release_id``,
-  ``format`` and ``name`` given, never ``dest``, and the chosen file's ``url``.
+  it (``wasde1026.txt``; sdk-core ADR-0020, amendment 2026-11-18, point c).
+  ``meta.request`` holds the parameters the caller gave, none left ``None``
+  (sdk-core ADR-0041); for the download, the ``release_id``, ``format`` and ``name``
+  given, never ``dest``, and the chosen file's ``url``.
   ``meta.total`` is ``pager.total_results`` of the last page fetched for the three paged
-  list tasks (ADR-0012), ``None`` elsewhere.
+  list tasks (sdk-core ADR-0034), ``None`` elsewhere.
   ``meta.retrieved_at`` is when the answer arrived for the tasks that ask upstream: the
   client keeps no cache; ``list_publications`` carries the packaged table's ``fetched``.
 - The packaged answer: ``list_publications`` answers from ``reference/publication.json``,
   the table ``scripts/refresh_reference.py`` wrote from every page of
   ``esmis_api_publication_findAll``, and checks its ``agency_acronym`` against
   ``reference/agency.json``, both read with core's ``PackagedList``, without a request.
-  Its ``meta`` is ``PackagedList.meta``'s (ADR-0022, rule 1): ``retrieved_at`` the
+  Its ``meta`` is ``PackagedList.meta``'s (sdk-core ADR-0041, decision 1): ``retrieved_at`` the
   table's ``fetched``, ``endpoint`` the operationId it came from, ``vintage``,
   ``published_at`` and ``total`` empty. An acronym the agency table lacks is refused
   with core's ``UnknownCode``, an ``InvalidRequestError``, naming the closest.
@@ -36,16 +37,16 @@ What every task follows:
   on or after ``CATALOG_ORDER_SINCE``, under its own stop rule (``_newest_before``), and
   refuses an older ``since`` and a call with neither ``since`` nor ``page`` before any
   request: every page of ``esmis_api_release_findAll`` is some 34 hours of requests
-  (ADR-0007).
+  (sdk-core ADR-0007).
 - Release times: ``meta.vintage`` is the release id as printed (``"796099"``). The four
   tasks about one release (``get_release``, ``get_latest_release``, ``list_release_files``,
   ``download_release_file``) set ``meta.published_at`` to its ``release_datetime`` as
-  printed with its ``+0000`` dropped, flagged ``published_at_naive`` (ADR-0022): ESMIS
+  printed with its ``+0000`` dropped, flagged ``published_at_naive`` (sdk-core ADR-0041): ESMIS
   prints ``+0000`` where its own calendar and the files' ``Last-Modified`` put the release
   at noon Eastern, so the time is upstream's text; no zone is attached and no time
   converted. ``Release`` keeps the value as printed; the list tasks leave
   ``meta.published_at`` empty.
-- A catalog, never a parser (ADR-0020): no task reads a released file's contents, and no
+- A catalog, never a parser (sdk-core ADR-0020): no task reads a released file's contents, and no
   answer from upstream is stored or cached; ``download_release_file`` writes where the
   caller says. Core's ``load_json`` caches the text of the packaged tables per process.
 """
@@ -98,15 +99,15 @@ __all__ = [
 ]
 
 BULK_TASKS = frozenset({"download_release_file"})
-"""Tasks the adapters skip (ADR-0019, decision 4): they write a file, which no tool or
-route hands out. Written by hand, as the template renders it from v0.3.0; core's
-``register_tasks`` (which ``build_server`` calls) and ``router_from_tasks`` read it from
-this module and leave its names out, so ``mcp.py`` and ``http.py`` pass ``__all__``
+"""Tasks the adapters skip (sdk-core ADR-0040, decision 4): they write a file, which no tool
+or route hands out. Written by hand, as the template renders it from v0.3.0; core's
+``tool_functions``, whose tasks ``mcp.py``'s ``build()`` serves, and ``router_from_tasks``
+read it from this module and leave its names out, so ``http.py`` passes ``__all__``
 whole."""
 
 # Four tools have an entry, each the family default cap, 200 rows or 64 KB, with a note
 # of its own that names the tool's parameters for seeing the rest, since the default note
-# names none (conventions §8, ADR-0016). The notes carry the cap's advice, so the task
+# names none (conventions §8, sdk-core ADR-0038). The notes carry the cap's advice, so the task
 # docstrings, which are the tool descriptions, leave it out (sdk-core's handover,
 # "Adopting core 0.3.0").
 # - list_publications (decided by Johannes on 2026-10-27): unfiltered it answers the
@@ -192,7 +193,7 @@ WASDE recordings, not probed for other publications."""
 
 
 def _request(**parameters: object) -> dict[str, object]:
-    """The parameters the caller gave, those left ``None`` omitted (ADR-0022)."""
+    """The parameters the caller gave, those left ``None`` omitted (sdk-core ADR-0041)."""
     return {name: value for name, value in parameters.items() if value is not None}
 
 
@@ -321,9 +322,11 @@ def _select(release: Release, format: str | None, name: str | None) -> ReleaseFi
 def _target(dest: str | PathLike[str] | None) -> Path:
     """``dest`` as a path, refused before any request when no file can be written there.
 
-    ``None`` is refused as a missing argument; a directory, or a path whose directory
-    does not exist, with core's own text (``AsyncClient.download``), as the taxonomy's
-    refusal (conventions §5, ADR-0007), so a bad ``dest`` costs no request.
+    ``None`` is refused as a missing argument. A directory, or a path whose directory
+    does not exist, is refused as core's ``AsyncClient.download`` refuses it, with
+    ``InvalidRequestError`` in its words (conventions §5, sdk-core ADR-0007); core checks
+    when the download starts, after the release lookup, so the check comes first here and
+    a bad ``dest`` costs no request.
 
     Raises:
         InvalidRequestError: ``dest`` is ``None``, a directory, or in a directory that
@@ -342,7 +345,7 @@ def _target(dest: str | PathLike[str] | None) -> Path:
 
 
 def _printed(release: Release) -> datetime:
-    """``release_datetime`` as printed, its ``+0000`` dropped, never converted (ADR-0022)."""
+    """``release_datetime`` as printed, ``+0000`` dropped, never converted (sdk-core ADR-0041)."""
     return release.release_datetime.replace(tzinfo=None)
 
 
@@ -494,7 +497,8 @@ async def get_publication_async(publication_identifier: str) -> Result[Publicati
         raise NotFoundError(
             f"ESMIS has no publication with the identifier {publication_identifier!r}: GET "
             f"{_path('publication/findByIdentifier', publication_identifier)} answered no "
-            "result; search_publications finds identifiers by keyword",
+            "result; search_publications (over MCP, the tool usda_esmis_search_publications) "
+            "finds identifiers by keyword",
             source=SOURCE,
         )
     meta = ResultMeta(
@@ -625,9 +629,10 @@ async def list_recent_releases_async(
         raise InvalidRequestError(
             f"since ({since}) is before {CATALOG_ORDER_SINCE}: ESMIS's catalog lists releases "
             f"in an order that follows their release dates only since {CATALOG_ORDER_SINCE}, "
-            "so a walk from an older since could stop early; use list_releases for one "
-            "publication's releases in release order, pass page to read older pages of the "
-            f"catalog, or pass a since on or after {CATALOG_ORDER_SINCE}",
+            "so a walk from an older since could stop early; use list_releases (over MCP, the "
+            "tool usda_esmis_list_releases) for one publication's releases in release order, "
+            "pass page to read older pages of the catalog, or pass a since on or after "
+            f"{CATALOG_ORDER_SINCE}",
             source=SOURCE,
         )
     request = _request(since=since, until=until, page=page)
@@ -705,7 +710,8 @@ async def get_latest_release_async(publication_identifier: str) -> Result[Releas
         raise NotFoundError(
             f"ESMIS lists no release for the identifier {publication_identifier!r}: GET "
             f"{_path('release/findByIdentifier', publication_identifier)} answered no "
-            "result; search_publications finds identifiers by keyword",
+            "result; search_publications (over MCP, the tool usda_esmis_search_publications) "
+            "finds identifiers by keyword",
             source=SOURCE,
         )
     latest = max(answer.results, key=lambda release: release.release_datetime)

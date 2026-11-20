@@ -2,7 +2,7 @@
 
 Conventions §3 and ``/add-endpoint`` give the rules.
 
-No ESMIS record carries a documented personal identifier (ADR-0017); the contact e-mail
+No ESMIS record carries a documented personal identifier (sdk-core ADR-0017); the contact e-mail
 addresses and telephone numbers of agencies and publications are upstream's published
 contacts.
 
@@ -20,7 +20,7 @@ tasks, and a projection of ``Publication`` (``UpstreamModel.project``, conventio
 the rows of the packaged publication table that ``list_publications`` answers from.
 ``ReleaseFile.from_url`` reads one item and ``Release.release_files`` all of a release's,
 in upstream order: the reading the file tasks use, which the packages that depend on
-this one call rather than copy (ADR-0021).
+this one call rather than copy (sdk-core ADR-0021).
 
 Every model keeps ``UpstreamModel``'s ``extra="ignore"``: a key upstream sends that a
 model does not name is dropped when parsed, never refused. That is how

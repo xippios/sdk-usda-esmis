@@ -2,7 +2,7 @@
 
 ESMIS packages two tables, each the records of one operation, fetched through the
 layer-1 wrappers in ``api/``, never through a task that answers from the package, and
-written with core's ``PackagedList.write`` (conventions §3, ADR-0022):
+written with core's ``PackagedList.write`` (conventions §3, sdk-core ADR-0041):
 
 - ``reference/agency.json``: every agency ``esmis_api_agency_findAll`` answers, with
   every field of ``Agency``, one request;
@@ -55,12 +55,7 @@ PROVENANCE = re.compile(r"(\| File \| Origin \| Fetched \|\n\| --- \| --- \| ---
 
 
 class Refused(Exception):
-    """A walk the script will not write; ``main`` exits with its message.
-
-    An ``Exception``, never ``SystemExit``: raised inside the coroutine that core's
-    ``sync`` runs on its background loop, a ``SystemExit`` stops that loop's thread and
-    leaves the caller waiting for ever.
-    """
+    """A walk the script will not write; ``main`` exits with its message."""
 
 
 async def agencies() -> PackagedList:
