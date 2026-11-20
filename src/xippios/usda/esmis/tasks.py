@@ -110,12 +110,12 @@ whole."""
 # names none (conventions §8, sdk-core ADR-0038). The notes carry the cap's advice, so the task
 # docstrings, which are the tool descriptions, leave it out (sdk-core's handover,
 # "Adopting core 0.3.0").
-# - list_publications (decided by Johannes on 2026-10-27): unfiltered it answers the
-#   whole packaged table, 2522 rows fetched on 2026-10-27, whose result, envelope
-#   included, measured 599,402 bytes of compact JSON (UTF-8, as cap_result counts them),
-#   about 150k tokens: too much for one tool result, so, as with sdk-comtrade's HS list,
-#   an agent filters it with search or agency_acronym and is never served it whole;
-#   Python and HTTP callers get the whole table.
+# - list_publications (decided in https://github.com/xippios/sdk-usda-esmis/pull/6):
+#   unfiltered it answers the whole packaged table, 2522 rows fetched on 2026-10-27, whose
+#   result, envelope included, measured 599,402 bytes of compact JSON (UTF-8, as
+#   cap_result counts them), about 150k tokens: too much for one tool result, so, as with
+#   sdk-comtrade's HS list, an agent filters it with search or agency_acronym and is never
+#   served it whole; Python and HTTP callers get the whole table.
 # - list_releases, called without page, answers every release of a publication from
 #   since on, hundreds of rows (703 for WASDE): its note names since, until and page.
 # - search_publications, called without page, answers every match of a keyword, about
@@ -188,8 +188,9 @@ is taken to be dated on or before it, as WASDE's are (the newest, 96169, is date
 2025-08-12). A walk from an older ``since`` would reach the imported ids, where a page of
 older-dated releases can sit above a newer one and end the walk early without a sign; so
 such a ``since`` is refused, and ``list_releases`` (one publication, in release order)
-or ``page`` serves the older dates (decided by Johannes on 2026-10-28). Read from the
-WASDE recordings, not probed for other publications."""
+or ``page`` serves the older dates (decided in
+https://github.com/xippios/sdk-usda-esmis/pull/11). Read from the WASDE recordings, not
+probed for other publications."""
 
 
 def _request(**parameters: object) -> dict[str, object]:

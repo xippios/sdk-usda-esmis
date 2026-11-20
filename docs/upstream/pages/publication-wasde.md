@@ -13,10 +13,11 @@ The World Agricultural Supply and Demand Estimates (WASDE) is prepared and relea
 
 ## Releases
 
-The list's filter form (`GET /publication/world-agricultural-supply-and-demand-estimates`) offers, in the select `date`, `All` and months as `YYYY-MM`, from `1973-09` to `2026-10`.
+The list's filter form (`GET /publication/world-agricultural-supply-and-demand-estimates`) offers, in the select `date`, `All` and months as `YYYY-MM`, from `1973-09` to `2026-11`.
 
 | Date | Download | Operations |
 | --- | --- | --- |
+| Nov 10 2026 (`2026-11-10T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/796142/wasde1126.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/796142/wasde1126.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/796142/wasde1126.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/796142/wasde1126.xml) | [View](https://esmis.nal.usda.gov/publication/world-agricultural-supply-and-demand-estimates/2026-11-10) |
 | Oct 09 2026 (`2026-10-09T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.xml) | [View](https://esmis.nal.usda.gov/publication/world-agricultural-supply-and-demand-estimates/2026-10-09) |
 | Sep 11 2026 (`2026-09-11T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/796054/wasde0926.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/796054/wasde0926.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/796054/wasde0926.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/796054/wasde0926.xml) | [View](https://esmis.nal.usda.gov/publication/world-agricultural-supply-and-demand-estimates/2026-09-11) |
 | Aug 12 2026 (`2026-08-12T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/796014/wasde0826.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/796014/wasde0826.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/796014/wasde0826.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/796014/wasde0826.xml) | [View](https://esmis.nal.usda.gov/publication/world-agricultural-supply-and-demand-estimates/2026-08-12) |
@@ -26,7 +27,6 @@ The list's filter form (`GET /publication/world-agricultural-supply-and-demand-e
 | Apr 09 2026 (`2026-04-09T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/795855/wasde0426.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/795855/wasde0426.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/795855/wasde0426.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/795855/wasde0426.xml) | [View](https://esmis.nal.usda.gov/publication/world-agricultural-supply-and-demand-estimates/2026-04-09) |
 | Mar 10 2026 (`2026-03-10T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/795813/wasde0326.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/795813/wasde0326.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/795813/wasde0326.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/795813/wasde0326.xml) | [View](https://esmis.nal.usda.gov/publication/world-agricultural-supply-and-demand-estimates/2026-03-10) |
 | Feb 10 2026 (`2026-02-10T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/795765/wasde0226.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/795765/wasde0226.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/795765/wasde0226.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/795765/wasde0226.xml) | [View](https://esmis.nal.usda.gov/publication/world-agricultural-supply-and-demand-estimates/2026-02-10) |
-| Jan 12 2026 (`2026-01-12T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/795722/wasde0126.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/795722/wasde0126.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/795722/wasde0126.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/795722/wasde0126.xml) | [View](https://esmis.nal.usda.gov/publication/world-agricultural-supply-and-demand-estimates/2026-01-12) |
 
 The list pages with `?page=N`: "Page 1" is `?page=0`, the last page `?page=70`.
 
@@ -34,7 +34,7 @@ The list pages with `?page=N`: "Page 1" is `?page=0`, the last page `?page=70`.
 
 | Date | Download |
 | --- | --- |
-| Oct 09 2026 (`2026-10-09T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.xml) |
+| Nov 10 2026 (`2026-11-10T12:00:00Z`) | [pdf](https://esmis.nal.usda.gov/sites/default/release-files/796142/wasde1126.pdf) [txt](https://esmis.nal.usda.gov/sites/default/release-files/796142/wasde1126.txt) [xls](https://esmis.nal.usda.gov/sites/default/release-files/796142/wasde1126.xls) [xml](https://esmis.nal.usda.gov/sites/default/release-files/796142/wasde1126.xml) |
 
 - **Contact office name**: World Agricultural Outlook Board
 - **Contact email**: [msewadeh@oce.usda.gov](mailto:msewadeh@oce.usda.gov)
