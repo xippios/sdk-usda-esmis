@@ -252,9 +252,9 @@ semantics or the shape of the public API.
   carry another identifier without it (`FDS`).
 - **Release times.** The API prints `release_datetime` with `+0000`, but upstream's own
   calendar and file times put the release at noon Eastern (`docs/upstream/OBSERVED.md`,
-  the zone label of release times),
-  and `Publication.upcoming_releases` print Eastern offsets (`2026-10-28T15:00:00-0400`,
-  `2026-11-04T15:00:00-0500`), which the model keeps. Decided by Johannes on 2026-10-27:
+  the zone label of release times), and `Publication.upcoming_releases` print Eastern
+  offsets (`2026-10-28T15:00:00-0400`, `2026-11-04T15:00:00-0500`), which the model
+  keeps. As https://github.com/xippios/sdk-usda-esmis/pull/5 decided,
   `Release.release_datetime` keeps the time as printed, an aware datetime at `+00:00`;
   the four tasks about one release (`get_release`, `get_latest_release`,
   `list_release_files`, `download_release_file`) set `meta.published_at` to that time
@@ -276,8 +276,9 @@ semantics or the shape of the public API.
   an older `since` without `page` is refused with `InvalidRequestError` before any
   request, naming `list_releases` and `page`, and so is a call with neither `since` nor
   `page`, or with `until` alone, as a walk of every release is 61,681 pages, about 34
-  hours (decided by Johannes on 2026-10-28; sdk-core ADR-0007). With `page` given,
-  `since` and `until` only filter that page, whatever their dates. `list_releases` and
+  hours (decided in https://github.com/xippios/sdk-usda-esmis/pull/11; sdk-core
+  ADR-0007). With `page` given, `since` and `until` only filter that page, whatever
+  their dates. `list_releases` and
   `list_recent_releases` filter `since` and `until` on the printed date of
   `release_datetime`, never converted, and their `meta.total` is upstream's count before
   that filter. `get_latest_release` takes the latest `release_datetime` of page 0, never
@@ -299,21 +300,23 @@ semantics or the shape of the public API.
   without a request, `meta` from `PackagedList.meta` (`retrieved_at` the table's
   `fetched`, `endpoint` `esmis_api_publication_findAll`, sdk-core ADR-0041), and refuses
   an `agency_acronym` the agency table lacks with core's `UnknownCode`; `list_agencies`
-  stays live. Decided by Johannes on 2026-10-27: its MCP tool keeps the default cap, 200
-  rows or 64 KB, with a note naming `search` and `agency_acronym` and that Python and
-  HTTP callers get the whole table; unfiltered the result is 599,402 bytes of compact
-  JSON, about 150k tokens, so an agent filters it, as with sdk-comtrade's HS list, and is
-  never served it whole (sdk-core ADR-0038). No enum is generated from the tables
+  stays live. As https://github.com/xippios/sdk-usda-esmis/pull/6 decided, its MCP tool
+  keeps the default cap, 200 rows or 64 KB, with a note naming `search` and
+  `agency_acronym` and that Python and HTTP callers get the whole table, since
+  unfiltered the result is 599,402 bytes of compact JSON, about 150k tokens, so an agent
+  filters it, as with sdk-comtrade's HS list, and is never served it whole (sdk-core
+  ADR-0038). No enum is generated from the tables
   (`enums.py` holds none, the document's enums are hand-written in `models.py`) and
   `params.PACKAGED_LISTS` stays empty. The template's `/refresh-reference-data` command
   (v0.3.0) puts a table in the script's `TABLES` and its name in `PACKAGED_LISTS`;
-  ESMIS's own script has neither, renders no enum and leaves `PACKAGED_LISTS` empty
-  (queue row 101); its docstring is the recipe for this package. The refresh budget:
-  102 keyless requests (the agencies, then
+  ESMIS's own script has neither, renders no enum and leaves `PACKAGED_LISTS` empty,
+  since its two tables are `PackagedList` files and no value list; its docstring is the
+  recipe for this package. The refresh budget: 102 keyless requests (the agencies, then
   `/publication/findAll` pages 0 to 100, bounded by `total_pages`) at 30 a minute, about
   four minutes, run once before each release and committed in a refresh PR of its own
-  when a table changed, none when both are unchanged (conventions §12; decided by
-  Johannes on 2026-10-27); the script refuses to write a walk whose pages disagree.
+  when a table changed, none when both are unchanged (conventions §12; decided in
+  https://github.com/xippios/sdk-usda-esmis/pull/6); the script refuses to write a walk
+  whose pages disagree.
   The nightly live tests compare the agency table with upstream and the publication
   count within a page.
 - **A catalog, never a parser** (sdk-core ADR-0020). This package lists publications,
@@ -334,7 +337,8 @@ semantics or the shape of the public API.
   unknown name, is `InvalidRequestError` naming the release's files, and a name of another
   format one naming its format. A release with an original and a revised file of one
   format (95621, the WASDE of 2013-08-12, lists `ORIGwasde-08-12-2013.xml` before
-  `wasde-08-12-2013.xml`) is reached by `name` (decided by Johannes on 2026-10-28). A
+  `wasde-08-12-2013.xml`) is reached by `name` (decided in
+  https://github.com/xippios/sdk-usda-esmis/pull/10). A
   release's files are `Release.release_files()`, `ReleaseFile.from_url` on each URL, in
   upstream order: the reading a dependent calls rather than copies (sdk-core ADR-0021).
   The download budget: one small file, the current WASDE `.txt` (about 120 KB), for the

@@ -5,8 +5,8 @@
 ESMIS packages no value list: its two packaged files, ``reference/publication.json`` and
 ``reference/agency.json``, are tables in core's ``PackagedList`` shape, which ``tasks.py``
 reads with ``PackagedList.load``, the reader that builds an answer's ``meta`` (sdk-core ADR-0041),
-so ``PACKAGED_LISTS`` stays empty (queue row 101). ``scripts/refresh_reference.py`` writes
-the files and ``reference/README.md`` carries their provenance.
+so ``PACKAGED_LISTS`` stays empty: a table is no value list. ``scripts/refresh_reference.py``
+writes the files and ``reference/README.md`` carries their provenance.
 """
 
 __all__ = ["PACKAGED_LISTS"]
