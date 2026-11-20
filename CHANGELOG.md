@@ -4,15 +4,65 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (pre-1.0: breaking changes bump the minor).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-20
+
+### Added
+
+- `xippios.usda.esmis.mcp.build()` returns the read-only tool set the entry point serves,
+  core's `ToolSet` with the caps of `tasks.MCP_CAPS`, so a host serves the same tools beside
+  other sources' in one server. `ENV_VARS`, beside `SOURCE`, names the variables the package
+  reads: none, as the API is keyless. (https://github.com/xippios/sdk-core/issues/245,
+  https://github.com/xippios/sdk-template/issues/81)
 
 ### Changed
 
+- A route answers an argument that its schema refuses, a `since` that is no date or a
+  missing `query`, as problem details before the task runs: HTTP 422, the title
+  `InvalidRequestError` and the detail `<argument>: <message>`, where FastAPI's own 422
+  listed its error details with the input. (https://github.com/xippios/sdk-core/issues/66)
+- `list_publications`'s refusal of an `agency_acronym` that the packaged agency table lacks
+  ends with `If upstream added it since, the packaged list is out of date.`, where it named
+  the maintainers' `/refresh-reference-data`, which an agent cannot run.
+  (https://github.com/xippios/sdk-core/issues/111)
+- A tool's error answer sets `isError` on its result beside the text
+  `error: <ErrorClass>: <message>`, so a client tells a refusal from data without reading
+  the text. (https://github.com/xippios/sdk-core/issues/168)
+- What the live API does that its OpenAPI document does not state moves from the README
+  into `docs/upstream/OBSERVED.md`, where each note ends with the probe that showed it: its
+  date, its operation and its sample. The documentation snapshot under `docs/upstream/` is
+  refreshed on 2026-11-20, its OpenAPI document unchanged.
+  (https://github.com/xippios/sdk-usda-esmis/issues/19)
+- A refusal that names another task names its MCP tool too: an unknown identifier in
+  `get_publication` and `get_latest_release` points to `search_publications` (over MCP,
+  the tool `usda_esmis_search_publications`), and `list_recent_releases`'s refusal of a
+  `since` before 2025-09-12 to `list_releases` (`usda_esmis_list_releases`).
+  (https://github.com/xippios/sdk-core/issues/111)
+- Adopts sdk-template v0.4.0, from v0.3.4, with `core_version=0.4.0`: xippios-core 0.4.0
+  and its conventions 1.28. (https://github.com/xippios/sdk-template/releases/tag/v0.4.0,
+  https://github.com/xippios/sdk-usda-esmis/issues/45)
+- Requires `xippios-core~=0.4.0`, from `~=0.3.0`. A `dest` that core's own download
+  refuses, one whose directory went away after the task's check, raises
+  `InvalidRequestError`, as the task's check before the release lookup does, where core
+  0.3 raised `ValueError`. (https://github.com/xippios/sdk-core/releases/tag/v0.4.0,
+  https://github.com/xippios/sdk-core/issues/152)
+- Adopts sdk-template v0.3.4, from v0.3.1, with conventions 1.27 and no new core minor: the
+  floor stays `xippios-core~=0.3.0`, and no module or test changes. The README lists the
+  documents a change follows under `## Documents`, and `CLAUDE.md` takes the place of
+  `.claude/family.md`, which the update deletes, and cites sdk-core's records as
+  `sdk-core ADR-NNNN`. (https://github.com/xippios/sdk-template/releases/tag/v0.3.4,
+  https://github.com/xippios/sdk-usda-esmis/issues/16)
 - Adopted sdk-template v0.3.1, with xippios-core 0.3.0 unchanged (conventions §15), no
   new core minor: `.github/CODEOWNERS` is rendered from the template's answers and names
   the code owner of the paths whose changes need one; `.gitignore` leaves copier's
   `*.rej` and `*.orig` out; `.claude/family.md`, `/adopt-release`, `/release-prep` and
   the PR template no longer describe how a pull request is merged.
+
+### Breaking
+
+- A tool refuses an argument that it does not declare before it runs, whatever its value,
+  with `error: InvalidRequestError: <argument>: Not an argument of this tool` and the
+  arguments it takes, where the argument was dropped and the tool ran without it.
+  (https://github.com/xippios/sdk-core/issues/84)
 
 ## [0.2.0] - 2026-10-29
 
