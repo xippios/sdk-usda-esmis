@@ -73,6 +73,7 @@ from xippios.usda.esmis.models import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+ROOT = Path(__file__).resolve().parents[1]
 API = f"{BASE_URL}/api/v1"
 WASDE_RELEASES = f"{API}/release/findByIdentifier/wasde"
 ALL_RELEASES = f"{API}/release/findAll"
@@ -959,6 +960,22 @@ def test_with_page_any_since_only_filters_the_page(
     assert sent_urls(route) == [f"{ALL_RELEASES}?page=0"]
 
 
+def test_list_recent_releases_returns_esmis_s_test_releases(replay_fixture: ReplayFixture) -> None:
+    """ESMIS's catalog lists test releases among the others, and the task returns them as listed.
+
+    Page 0 of 2026-10-27 holds three, the identifier ``test`` and the title ``Test DDO``
+    (``docs/upstream/OBSERVED.md``, "``/release/findAll`` lists test releases"), and the
+    tool's description names them (https://github.com/xippios/sdk-usda-esmis/issues/32).
+    """
+    replay_fixture("release_find_all", "page0")
+    result = tasks.list_recent_releases(page=0)
+    test = [(item.id, item.title) for item in result.data if item.identifier == ["test"]]
+    assert test == [("796113", "Test DDO"), ("796105", "Test DDO"), ("796098", "Test DDO")]
+    description = (tasks.list_recent_releases.__doc__ or "").split("Args:")[0]
+    assert '``"test"``' in description
+    assert '``"Test DDO"``' in description
+
+
 @pytest.mark.anyio
 async def test_the_walk_stops_at_total_pages_without_a_request_past_it() -> None:
     """A full last page ends the walk by upstream's count: no request for the page after.
@@ -1533,3 +1550,47 @@ async def test_a_tool_reports_not_found_as_text(replay_fixture: ReplayFixture) -
 def test_every_task_is_tested_through_the_mcp_server_or_is_bulk() -> None:
     tools = {case[0] for case in MCP_CASES}
     assert tools | tasks.BULK_TASKS == set(tasks.__all__)
+
+
+def test_the_readme_scope_names_each_operation_no_task_reads() -> None:
+    """The README's ``## Scope`` names what of the OpenAPI document no caller reaches.
+
+    Each operation that no task reads, and ``page`` of ``esmis_api_publication_findAll``,
+    whose table the package ships whole, stands in a bullet of its own with its public issue
+    (https://github.com/xippios/sdk-faostat/issues/58, part 2). The operations a task reads
+    are the operationIds that ``tasks`` names, and the packaged table's ``endpoint``.
+    """
+    document = (ROOT / "docs" / "upstream" / "openapi" / "esmis_public_api.yaml").read_text(
+        encoding="utf-8"
+    )
+    operations = set(re.findall(r"operationId:\s*(\S+)", document))
+    read = {
+        value
+        for name, value in vars(tasks).items()
+        if name.isupper() and isinstance(value, str) and value.startswith("esmis_api_")
+    }
+    read.add(PackagedList.load(PACKAGE, "publication").endpoint)
+    unread = operations - read
+    assert unread == {
+        "esmis_api_agency_findByAcronym",
+        "esmis_api_agency_findById",
+        "esmis_api_publication_findByAgency",
+        "esmis_api_publication_findById",
+        "esmis_api_release_findByPubId",
+    }
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "\n## Scope\n" in readme
+    scope = readme.split("\n## Scope\n", 1)[1].split("\n## ", 1)[0]
+    bullets = ["- " + item for item in scope.split("\n- ")[1:]]
+    issue = "https://github.com/xippios/sdk-usda-esmis/issues/"
+    for operation in sorted(unread):
+        named = [bullet for bullet in bullets if f"`{operation}`" in bullet]
+        assert len(named) == 1, operation
+        assert issue in named[0], operation
+    paged = [
+        bullet
+        for bullet in bullets
+        if "`page`" in bullet and "`esmis_api_publication_findAll`" in bullet
+    ]
+    assert len(paged) == 1
+    assert issue in paged[0]
