@@ -530,6 +530,30 @@ def test_get_publication(replay_fixture: ReplayFixture) -> None:
     assert sent_urls(route) == [f"{API}/publication/findByIdentifier/wasde"]
 
 
+def test_get_publication_refuses_an_identifier_that_two_publications_share(
+    respx_mock: respx.MockRouter,
+) -> None:
+    """NOT RECORDED: the recorded answer of ``publication_find_by_identifier/wasde.json`` with
+    a second recorded publication, 1762 of ``publication_search/wasde_page0.json``, appended to
+    its results and its pager counting 2, the form that the probe of ``AMS_1045`` saw and no
+    fixture holds (conventions §10, kind 4)."""
+    body = recorded_body("publication_find_by_identifier", "wasde")
+    second = recorded_body("publication_search", "wasde_page0")["results"][0]
+    assert second["id"] == "1762"
+    body["results"].append(second)
+    body["pager"]["total_results"] = 2
+    route = respx_mock.get(f"{API}/publication/findByIdentifier/wasde").respond(json=body)
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks.get_publication("wasde")
+    assert str(caught.value) == (
+        "ESMIS answered GET /api/v1/publication/findByIdentifier/wasde with 2 publications, "
+        "1659 and 1762, so the identifier names no one publication and none is returned; "
+        f"{SEARCH_BY_KEYWORD}, and its answer holds each publication whole."
+    )
+    assert caught.value.source == SOURCE
+    assert sent_urls(route) == [f"{API}/publication/findByIdentifier/wasde"]
+
+
 def test_get_publication_unknown_is_not_found(replay_fixture: ReplayFixture) -> None:
     replay_fixture("publication_find_by_identifier", "unknown")
     with pytest.raises(NotFoundError) as caught:
