@@ -2,55 +2,55 @@
 
 ``/add-endpoint`` adds them.
 
-One live smoke test per task, ten in all, next to the reachability check, one test of
-the order the release tasks rely on and one of the packaged agency table; keyless,
-fifteen requests in all, paced by the client at 30 a minute. Each task test checks the
-shape of what ESMIS answers today, never a value that changes with the next release.
-``list_publications`` sends nothing: its test compares the packaged table's size with
-upstream's count today. The download fetches the current WASDE ``.txt`` alone (about
-120 KB; the nightly budget is one small ``.txt``), named by ``name=`` from the latest
-release's own file list (``Release.release_files()``, no request), into a temporary
-directory, and checks the file's size, never what it says (sdk-core ADR-0020). Requests: the
-reachability check 1, ``list_agencies`` 1, the packaged agency table 1,
-``list_publications`` 1 (page 0 of ``esmis_api_publication_findAll``, for its count),
-``search_publications`` 1 (one short page), ``get_publication`` 1, ``list_releases`` 1
-(page 0), ``list_recent_releases`` 1 (page 0, which also checks the id order its walk
-relies on), ``get_release`` 1, ``get_latest_release`` 1, ``list_release_files`` 1, the
-download 3 (the latest WASDE release, the release, the file) and the order check 1.
+Each task has a live smoke test, keyless, paced by the client at 30 requests a minute:
+``list_agencies``, ``list_publications``, ``search_publications`` (one short page),
+``get_publication``, ``list_releases`` (page 0), ``list_recent_releases`` (page 0, which
+also checks the id order its walk relies on), ``get_release``, ``list_release_files`` and
+``download_release_file``; one more test checks the order of a publication's releases that
+``list_releases`` relies on. Each checks the shape of what ESMIS answers today, never a
+value that changes with the next release. ``list_publications`` sends nothing: its test
+compares the packaged table's size with upstream's count today, read from page 0 of
+``esmis_api_publication_findAll``. The download fetches the current WASDE ``.txt`` alone,
+named by ``name=`` from the latest release, row 0 of ``list_releases``'s page 0, into a
+temporary directory, and checks the file's size, never what it says (sdk-core ADR-0020).
+
+The two packaged tables are held against upstream so: the agency table by core's nightly
+comparison, which fetches it through ``api.agency_find_all`` and compares it by acronym
+(``LIVE_LISTS``, sdk-core ADR-0055), and the publication table, 101 pages of
+``esmis_api_publication_findAll``, by the reference refresh before each release, which walks
+it whole, and by the count of ``test_list_publications_live`` (``NO_LIVE_LIST``). Core's
+testing plugin prints the run's requests as ``requests sent by the live run: <n>``, the count
+in the log of ``live.yml``; core's response cache answers a second read of a path within its
+lifetime, so the run sends fewer requests than its calls.
 """
 
-from datetime import date
 from pathlib import Path
 
-import httpx
 import pytest
-from xippios.core import PackagedList
+from xippios.core.testing.live import *  # noqa: F403
 
 from xippios.usda.esmis import api, tasks
-from xippios.usda.esmis._client import BASE_URL, SOURCE, config
-from xippios.usda.esmis.models import Agency, Pager
+from xippios.usda.esmis._client import BASE_URL
+from xippios.usda.esmis.models import Pager
+from xippios.usda.esmis.params import AGENCIES
 
 pytestmark = [pytest.mark.live, pytest.mark.anyio]
+
+LIVE_LISTS = {  # each packaged list compared, by its file reference/<name>.json
+    "agency": (AGENCIES, api.agency_find_all),
+}
+NO_LIVE_LIST = {  # each packaged list not compared, with the reason
+    "publication": (
+        "A fetch walks every page of esmis_api_publication_findAll, 101 requests a night; the "
+        "reference refresh before each release walks it whole, and "
+        "test_list_publications_live compares its count."
+    ),
+}
 
 WASDE = "wasde"
 OCTOBER_2026_WASDE = 796099
 """A WASDE release the catalog keeps, its id stable; its files are checked by shape and for a
 ``.txt`` (``test_list_release_files_live``)."""
-
-
-async def test_upstream_answers() -> None:
-    """The base URL answers without a server error.
-
-    A plain request, not the package's client; any answer below 500 (a 404 at the
-    root, say) shows the host is up.
-    """
-    async with httpx.AsyncClient(
-        headers={"User-Agent": config.user_agent},
-        timeout=config.timeouts.to_httpx(),
-        follow_redirects=True,
-    ) as http:
-        response = await http.get(BASE_URL)
-    assert response.status_code < 500
 
 
 async def test_list_agencies_live() -> None:
@@ -59,18 +59,6 @@ async def test_list_agencies_live() -> None:
     assert all(agency.acronym and agency.id.isdigit() for agency in result.data)
     assert result.meta.endpoint == "esmis_api_agency_findAll"
     assert result.meta.total is None
-
-
-async def test_the_packaged_agency_table_matches_upstream_live() -> None:
-    """The packaged agencies are upstream's today: as many, the same acronyms in order.
-
-    ``list_publications`` refuses an ``agency_acronym`` the packaged table lacks, so an
-    agency upstream added since would be refused until the next refresh; this says when.
-    """
-    packaged = PackagedList.load(tasks.PACKAGE, "agency").parse(Agency, source=SOURCE)
-    live = await api.agency_find_all()
-    assert len(packaged) == len(live)
-    assert [agency.acronym for agency in packaged] == [agency.acronym for agency in live]
 
 
 PUBLICATION_TOLERANCE = 25
@@ -87,8 +75,9 @@ async def test_list_publications_live() -> None:
     """The packaged table's size against upstream's ``total_results`` today, within a page."""
     packaged = await tasks.list_publications_async()
     answer = await api.publication_find_all(0)
-    assert isinstance(answer.pager, Pager)
-    assert abs(answer.pager.total_results - len(packaged.data)) <= PUBLICATION_TOLERANCE
+    assert isinstance(answer.payload.pager, Pager)
+    total = answer.payload.pager.total_results
+    assert abs(total - len(packaged.data)) <= PUBLICATION_TOLERANCE
     assert packaged.meta.endpoint == "esmis_api_publication_findAll"
 
 
@@ -114,13 +103,13 @@ async def test_list_releases_live() -> None:
 
 
 async def test_page_zero_of_a_publication_is_newest_first() -> None:
-    """The order ``list_releases`` and ``get_latest_release`` rely on, observed only.
+    """The order ``list_releases`` relies on, observed only: its row 0 is the latest release.
 
     Page 0 of a publication's releases runs latest ``release_datetime`` first; the
     order is not documented, so it is checked here, never a date or an id.
     """
     answer = await api.release_find_by_identifier(WASDE, 0)
-    times = [release.release_datetime for release in answer.results]
+    times = [release.release_datetime for release in answer.payload.results]
     assert len(times) > 1
     assert times == sorted(times, reverse=True)
 
@@ -145,15 +134,6 @@ async def test_get_release_live() -> None:
     assert result.meta.published_at_naive
 
 
-async def test_get_latest_release_live() -> None:
-    result = await tasks.get_latest_release_async(WASDE)
-    assert WASDE in result.data.identifier
-    assert result.meta.vintage == result.data.id
-    assert result.meta.published_at == result.data.release_datetime.replace(tzinfo=None)
-    assert result.meta.published_at_naive
-    assert result.data.release_datetime.date() <= date.today()
-
-
 async def test_list_release_files_live() -> None:
     result = await tasks.list_release_files_async(OCTOBER_2026_WASDE)
     assert result.data
@@ -166,23 +146,23 @@ async def test_list_release_files_live() -> None:
 async def test_download_release_file_live(tmp_path: Path) -> None:
     """The current WASDE ``.txt``, the nightly budget's one file, into a temporary directory.
 
-    Chosen by ``name`` and ``format`` from the latest release's own file list, which
-    ``Release.release_files()`` reads without a request.
+    The latest release is row 0 of ``list_releases``'s page 0; the file is chosen by
+    ``name`` and ``format`` from its own file list, which ``Release.release_files()`` reads
+    without a request.
     """
-    latest = await tasks.get_latest_release_async(WASDE)
-    files = latest.data.release_files()
+    page = await tasks.list_releases_async(WASDE, page=0)
+    latest = page.data[0]
+    files = latest.release_files()
     txt = next((file for file in files if file.format == "txt"), None)
     formats = sorted({file.format for file in files})
     assert txt is not None, f"the latest WASDE release has no txt file; its formats: {formats}"
     dest = tmp_path / "wasde.txt"
-    result = await tasks.download_release_file_async(
-        int(latest.data.id), "txt", dest, name=txt.name
-    )
+    result = await tasks.download_release_file_async(int(latest.id), "txt", dest, name=txt.name)
     assert result.data.path == dest
     assert result.data.bytes == dest.stat().st_size > 0
     assert (result.data.content_type or "").startswith("text/")
     assert result.meta.endpoint == txt.name
     assert result.meta.request["url"] == txt.url
     assert result.meta.request["name"] == txt.name
-    assert result.meta.vintage == latest.data.id
+    assert result.meta.vintage == latest.id
     assert [path.name for path in tmp_path.iterdir()] == ["wasde.txt"]

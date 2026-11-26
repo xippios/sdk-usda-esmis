@@ -3,7 +3,9 @@
 ``/add-endpoint`` and ``/record-fixture`` add them.
 
 Every task is replayed against the answers recorded for the wrappers on 2026-10-27, and
-every tool but the bulk task is called end to end through the MCP server.
+every tool but the bulk task is called end to end through the MCP server. Each answer a
+test builds, or changes in memory, says where it comes from and names its kind where it is
+built (conventions §10).
 ``list_publications`` answers from the packaged tables in ``reference/`` and sends
 nothing: its tests mount no fixture and check that no request left. Four answers
 were recorded for the tasks: WASDE's release page 1 (``release_find_by_identifier/
@@ -20,7 +22,7 @@ type, never by what the file says (sdk-core ADR-0020).
 import inspect
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from importlib import resources
 from pathlib import Path
@@ -33,12 +35,16 @@ from pydantic import TypeAdapter
 from xippios.core import (
     Downloaded,
     InvalidRequestError,
+    MemoryCache,
     NotFoundError,
     PackagedList,
     Result,
     ResultCap,
     UnknownCode,
     UpstreamModel,
+    ValidationError,
+    check_dest,
+    fetch_pages,
 )
 from xippios.core.mcp import cap_result, tool_name
 from xippios.core.testing import (
@@ -52,7 +58,6 @@ from xippios.core.testing import (
 )
 
 from xippios.usda.esmis import _client, tasks
-from xippios.usda.esmis import mcp as esmis_mcp
 from xippios.usda.esmis._client import BASE_URL, SOURCE, client
 from xippios.usda.esmis.http import router
 from xippios.usda.esmis.mcp import server
@@ -82,6 +87,10 @@ PACKAGED_FETCHED = "2026-10-27T17:24:48Z"
 """The publication table's ``fetched``, as written."""
 FILE_KEYS = {"param", "endpoint", "fetched", "note", "records"}
 """The keys a packaged file may hold (sdk-core ADR-0041, decision 5)."""
+NOTHING_SENT = "Nothing was sent."
+"""The sentence after the first of each refusal before a request (conventions §5)."""
+WAOB = {"WAOB": "World Agricultural Outlook Board"}
+"""The agency of every WASDE release, as ``meta.names`` names it by the packaged list."""
 SEARCH_BY_KEYWORD = (
     "search_publications (over MCP, the tool usda_esmis_search_publications) finds "
     "identifiers by keyword"
@@ -89,10 +98,14 @@ SEARCH_BY_KEYWORD = (
 """How a refusal of an unknown identifier names the task to call instead (conventions §8)."""
 
 
+def recorded_body(endpoint: str, case: str) -> Any:
+    """A recorded answer's body, decoded as upstream sent it."""
+    return json.loads(load_fixture(FIXTURES / endpoint / f"{case}.json").response.content)
+
+
 def recorded[T](type_: type[T], endpoint: str, case: str) -> T:
     """A recorded answer, parsed as the wrapper parses it."""
-    body = json.loads(load_fixture(FIXTURES / endpoint / f"{case}.json").response.content)
-    return TypeAdapter(type_).validate_python(body)
+    return TypeAdapter(type_).validate_python(recorded_body(endpoint, case))
 
 
 def releases_of(case: str) -> list[Release]:
@@ -144,6 +157,11 @@ def test_list_publications_answers_the_whole_table_without_a_request(
     assert result.meta.request == {}, "filters left None are omitted"
     assert (result.meta.vintage, result.meta.published_at, result.meta.total) == (None,) * 3
     assert not result.meta.published_at_naive
+    agencies = PackagedList.load(PACKAGE, "agency").parse(Agency, source=SOURCE)
+    assert result.meta.names == {
+        "agency_acronym": {agency.acronym: agency.title for agency in agencies}
+    }, "every agency of the table, by the packaged agency list"
+    assert result.meta.notes == []
     assert respx_mock.calls.call_count == 0
 
 
@@ -179,6 +197,16 @@ def test_list_publications_by_agency_acronym(acronym: str, count: int) -> None:
     assert len(result.data) == count
     assert all(acronym in (row.agency_acronym or []) for row in result.data)
     assert result.meta.request == {"agency_acronym": acronym}
+
+
+@pytest.mark.parametrize("search", [None, "xippios-matches-nothing"])
+def test_list_publications_names_the_acronym_asked_for(search: str | None) -> None:
+    """``meta.names`` names the agency asked for, by its title, also where no row matches."""
+    result = tasks.list_publications(search=search, agency_acronym="ERS")
+    assert bool(result.data) is (search is None)
+    assert result.meta.names["agency_acronym"]["ERS"] == "Economic Research Service"
+    if not result.data:
+        assert result.meta.names == {"agency_acronym": {"ERS": "Economic Research Service"}}
 
 
 def test_list_publications_with_both_filters() -> None:
@@ -218,8 +246,11 @@ def test_list_publications_refuses_an_acronym_the_agency_table_lacks(
     assert refusal.fetched == agencies.fetched
     assert list(refusal.closest) == closest
     message = str(refusal)
-    assert f"{acronym!r} is not an agency_acronym in the packaged agency list" in message
-    assert f"(fetched {agencies.fetched:%Y-%m-%d})" in message
+    assert message.startswith(
+        f"{acronym!r} is not an agency_acronym in the packaged agency list "
+        f"(fetched {agencies.fetched:%Y-%m-%d}). {NOTHING_SENT}"
+    )
+    assert "list_publications keeps the publications that list the acronym exactly" in message
     for code, name in closest:
         assert f"{code} ({name})" in message
     assert respx_mock.calls.call_count == 0
@@ -265,18 +296,18 @@ def test_publication_row_is_a_projection_of_publication() -> None:
 
 CAP_NOTE = (
     "showing 200 of 2522 rows (cap: 200 rows or 65536 bytes); filter with search (text of an "
-    "id, an identifier or a title) or agency_acronym (as list_agencies spells it) to see the "
-    "rest; Python and HTTP callers get the whole table"
+    "id, an identifier or a title) or agency_acronym (as list_agencies spells it) to narrow "
+    "the list; continue with offset=200"
 )
-"""The note of the MCP tool called without a filter: the default cap, the cap's own note."""
+"""The note of the MCP tool called without a filter: the default cap, paged, with its note."""
 
 
 def test_the_python_task_returns_the_whole_table_the_tool_caps() -> None:
     cap = tasks.MCP_CAPS["list_publications"]
     assert (cap.max_rows, cap.max_bytes) == (ResultCap().max_rows, ResultCap().max_bytes)
+    assert cap.paged, "a packaged answer: a continuation costs upstream nothing"
     result = tasks.list_publications()
     whole = json.dumps(result.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
-    assert len(whole.encode()) == 599_402, "the size MCP_CAPS's comment names"
     assert len(result.data) == PUBLICATIONS, "Python callers get the whole table"
     cut = json.loads(cap_result(result, cap))
     assert cut["data"] == json.loads(whole)["data"][:200]
@@ -294,6 +325,8 @@ CAPPED_PARAMETERS = {
 
 def test_four_tools_keep_the_default_cap_with_a_note_naming_their_parameters() -> None:
     assert set(tasks.MCP_CAPS) == set(CAPPED_PARAMETERS)
+    paged = [name for name, cap in tasks.MCP_CAPS.items() if cap.paged]
+    assert paged == ["list_publications"], "the one tool whose second run sends no request"
     default = ResultCap()
     for name, named in CAPPED_PARAMETERS.items():
         cap = tasks.MCP_CAPS[name]
@@ -388,9 +421,29 @@ def test_search_publications_refuses_an_empty_query(
     replay_fixture: ReplayFixture, query: str
 ) -> None:
     route = replay_fixture("publication_search", "empty_query")
-    with pytest.raises(InvalidRequestError, match="query must not be empty"):
+    with pytest.raises(InvalidRequestError) as caught:
         tasks.search_publications(query)
+    assert str(caught.value).startswith(f"query must not be empty or blank. {NOTHING_SENT}")
     assert sent_urls(route) == [], "refused before anything is sent"
+
+
+@pytest.mark.anyio
+async def test_a_page_of_another_size_stops_the_walk(respx_mock: respx.MockRouter) -> None:
+    """NOT RECORDED: page 0 of ``publication_search`` for ``wasde`` as recorded on 2026-10-27,
+    its pager's ``items_per_page`` changed in memory from 25 to 50, a form upstream was not
+    seen to send (conventions §10, kind 4): the walk counts its offsets in pages of 25, so it
+    refuses rather than skip or repeat items, naming what it sent."""
+    body = recorded_body("publication_search", "wasde_page0")
+    body["pager"]["items_per_page"] = 50
+    route = respx_mock.get(f"{API}/publication/search").respond(json=body)
+    with pytest.raises(ValidationError) as caught:
+        await tasks.search_publications_async("wasde")
+    assert str(caught.value).startswith(
+        "ESMIS answered page 0 of GET /api/v1/publication/search in pages of 50 items, where "
+        "the walk counts 25"
+    )
+    assert caught.value.source == SOURCE
+    assert sent_urls(route) == [f"{API}/publication/search?query=wasde&page=0"]
 
 
 def test_get_publication(replay_fixture: ReplayFixture) -> None:
@@ -474,6 +527,32 @@ def test_list_releases_keeps_the_printed_dates_between_since_and_until(
     assert sent_urls(route) == [f"{WASDE_RELEASES}?page=0"]
 
 
+def test_list_releases_without_since_or_page_is_refused_past_the_bound(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """WASDE's 703 releases fill 29 pages, more than the 24 that one call fetches."""
+    route = replay_fixture("release_find_by_identifier", "wasde_page0", match_params=["page"])
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks.list_releases("wasde")
+    assert str(caught.value) == (
+        "the walk needs more than the 24 pages that one call fetches: upstream counts 703 "
+        "records on 29 pages of 25, and the walk reached page 1 of 29 after 1 request. It "
+        "returns nothing; pass page to fetch one page at a time."
+    )
+    assert caught.value.source == SOURCE
+    assert tasks.WALK_PAGES == 24
+    assert sent_urls(route) == [f"{WASDE_RELEASES}?page=0"], "one request, then the refusal"
+
+
+def test_the_latest_release_is_the_first_row_of_page_zero(replay_fixture: ReplayFixture) -> None:
+    """A publication lists its releases latest ``release_datetime`` first, as observed."""
+    replay_fixture("release_find_by_identifier", "wasde_page0", match_params=["page"])
+    result = tasks.list_releases("wasde", page=0)
+    assert result.data[0] == max(result.data, key=lambda release: release.release_datetime)
+    assert result.data[0].id == "796099"
+    assert result.meta.names == {"agency_acronym": WAOB}
+
+
 def test_list_releases_unknown_identifier_is_empty(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("release_find_by_identifier", "unknown")
     result = tasks.list_releases("nope-nope")
@@ -484,8 +563,12 @@ def test_list_releases_unknown_identifier_is_empty(replay_fixture: ReplayFixture
 
 def test_list_releases_refuses_since_after_until(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("release_find_by_identifier", "wasde_page0")
-    with pytest.raises(InvalidRequestError, match="since"):
+    with pytest.raises(InvalidRequestError) as caught:
         tasks.list_releases("wasde", since=date(2026, 1, 1), until=date(2025, 1, 1))
+    assert str(caught.value) == (
+        f"since (2026-01-01) is after until (2025-01-01): no release can lie between them. "
+        f"{NOTHING_SENT}"
+    )
     assert sent_urls(route) == []
 
 
@@ -546,10 +629,38 @@ def test_list_recent_releases_walks_until_a_page_is_newest_more_than_14_days_bef
     assert result.meta.endpoint == "esmis_api_release_findAll"
     assert result.meta.request == {"since": since}
     assert result.meta.total == 1542028, "page 1's count, the last page fetched"
+    assert result.meta.notes == [
+        "The walk ended at page 1, the first page whose newest release is dated more than 14 "
+        "days before since (2026-10-24); a release catalogued on a later page is not listed, "
+        "and page reads it."
+    ]
     # Page 0's oldest release (2026-09-28) is before since, where list_releases's rule
     # would stop; its newest (2026-10-26) is not 14 days before since, so the walk goes on.
     # Page 1's newest (2026-10-09) is 15 days before since: the walk ends there, with no
     # request for page 2, which no route answers and the plugin refuses.
+    assert sent_urls(first) == [f"{ALL_RELEASES}?page=0"]
+    assert sent_urls(second) == [f"{ALL_RELEASES}?page=1"]
+
+
+def test_a_walk_keeps_a_release_that_two_pages_list_once(
+    replay_fixture: ReplayFixture, respx_mock: respx.MockRouter
+) -> None:
+    """NOT RECORDED: page 1 of ``release_find_all`` as recorded on 2026-10-28, its pager's
+    ``total_results`` changed in memory to 50 so that the walk ends there by upstream's
+    count, a form upstream was not seen to send (conventions §10, kind 4); page 0 is
+    replayed as recorded. Both pages list 796100, 796099 and 796098: three releases
+    catalogued between the two recordings moved them from the end of page 0 to the head of
+    page 1, and the walk keeps each once."""
+    first = replay_fixture("release_find_all", "page0", match_params=["page"])
+    body = recorded_body("release_find_all", "page1")
+    body["pager"]["total_results"] = 50
+    second = respx_mock.get(ALL_RELEASES, params={"page": "1"}).respond(json=body)
+    result = tasks.list_recent_releases(since=date(2026, 9, 28))
+    ids = [release.id for release in result.data]
+    for repeated in ("796100", "796099", "796098"):
+        assert ids.count(repeated) == 1, repeated
+    assert len(ids) == len(set(ids))
+    assert result.meta.notes == ["The walk ended at the last page of esmis_api_release_findAll."]
     assert sent_urls(first) == [f"{ALL_RELEASES}?page=0"]
     assert sent_urls(second) == [f"{ALL_RELEASES}?page=1"]
 
@@ -624,8 +735,6 @@ def test_the_bound_is_the_first_wasde_release_of_the_new_ids() -> None:
 @pytest.mark.parametrize(
     ("arguments", "message"),
     [
-        ({}, "pass since or page: without either"),
-        ({"until": date(2026, 10, 23)}, "pass since or page: until alone bounds nothing"),
         (
             {"since": date(2026, 10, 24), "until": date(2026, 10, 20)},
             "since (2026-10-24) is after until (2026-10-20)",
@@ -645,8 +754,6 @@ def test_the_bound_is_the_first_wasde_release_of_the_new_ids() -> None:
         ),
     ],
     ids=[
-        "neither",
-        "until-alone",
         "since-after-until",
         "since-after-until-with-page",
         "since-before-the-bound",
@@ -661,18 +768,36 @@ def test_list_recent_releases_refuses_before_any_request(
         tasks.list_recent_releases(**arguments)
     text = str(caught.value)
     assert text.startswith(message)
+    assert f". {NOTHING_SENT} " in text or text.endswith(f". {NOTHING_SENT}")
     assert caught.value.source == SOURCE
-    if "page" not in arguments and "since" not in arguments:
-        assert "1,542,025 releases on 61,681 pages" in text
-        assert "about 34 hours at 30 requests a minute" in text
-        assert "pass since (e.g. 2026-10-20) or page" in text
     if message.endswith("is before 2025-09-12"):
         assert (
-            "use list_releases (over MCP, the tool usda_esmis_list_releases) for one "
+            "Use list_releases (over MCP, the tool usda_esmis_list_releases) for one "
             "publication's releases in release order"
         ) in text, "names the task and its tool (conventions §8)"
         assert "pass page to read older pages" in text
     assert respx_mock.calls.call_count == 0, "refused before any request"
+
+
+@pytest.mark.parametrize(
+    "arguments", [{}, {"until": date(2026, 10, 23)}], ids=["neither", "until-alone"]
+)
+def test_list_recent_releases_without_since_is_refused_after_its_first_request(
+    replay_fixture: ReplayFixture, arguments: dict[str, Any]
+) -> None:
+    """Without ``since`` the walk has no stop, and the catalog's 61,681 pages pass the bound.
+
+    ``until`` bounds nothing of the walk, which starts at the newest catalogued release.
+    """
+    route = replay_fixture("release_find_all", "page0", match_params=["page"])
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks.list_recent_releases(**arguments)
+    assert str(caught.value) == (
+        "the walk needs more than the 24 pages that one call fetches: upstream counts "
+        "1,542,025 records on 61,681 pages of 25, and the walk reached page 1 of 61,681 after "
+        "1 request. It returns nothing; pass page to fetch one page at a time."
+    )
+    assert sent_urls(route) == [f"{ALL_RELEASES}?page=0"]
 
 
 @pytest.mark.parametrize("since", [date(2025, 9, 12), date(2025, 9, 11)])
@@ -689,16 +814,21 @@ def test_with_page_any_since_only_filters_the_page(
 
 @pytest.mark.anyio
 async def test_the_walk_stops_at_total_pages_without_a_request_past_it() -> None:
-    """A full last page ends the walk by ``total_pages``: no request for the page after."""
+    """A full last page ends the walk by upstream's count: no request for the page after.
+
+    The pager of one full page is an input of the test, not an answer from ESMIS.
+    """
     full = releases_of("wasde_page0")
     pager = Pager(current_page=0, items_per_page=25, total_pages=1, total_results=25)
     asked: list[int] = []
 
-    async def fetch_page(page: int) -> tuple[Pager | tuple[()], list[Release]]:
-        asked.append(page)
-        return pager, full
+    async def fetch(offset: int) -> tuple[Sequence[Release], int | None]:
+        asked.append(offset // tasks.PAGE_SIZE)
+        return tasks._page(pager, full, 0, "GET /api/v1/release/findByIdentifier/wasde")
 
-    items, total = await tasks._Pages(fetch_page).walk()
+    items, total = await fetch_pages(
+        fetch, page_size=tasks.PAGE_SIZE, most=tasks.WALK_PAGES, paging="page"
+    )
     assert (items, total, asked) == (full, 25, [0])
 
 
@@ -713,33 +843,28 @@ def test_get_release(replay_fixture: ReplayFixture) -> None:
     assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
     assert result.meta.request == {"release_id": 796099}
     assert result.meta.total is None
+    assert result.meta.names == {"agency_acronym": WAOB}, "by the packaged agency list"
     assert sent_urls(route) == [f"{API}/release/findById/796099"]
+
+
+def test_a_second_call_within_the_cache_lifetime_sends_no_request(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """Core's response cache keeps every path for its default 300 s (sdk-core ADR-0061, 11)."""
+    assert isinstance(_client.config.cache, MemoryCache)
+    assert dict(_client.config.cache.lifetimes) == {"/": 300.0}
+    route = replay_fixture("release_find_by_id", "796099")
+    first = tasks.get_release(796099)
+    second = tasks.get_release(796099)
+    assert second.data == first.data
+    assert second.meta.retrieved_at == first.meta.retrieved_at, "when the answer was stored"
+    assert sent_urls(route) == [f"{API}/release/findById/796099"], "one request for two calls"
 
 
 def test_get_release_unknown_is_not_found(replay_fixture: ReplayFixture) -> None:
     replay_fixture("release_find_by_id", "unknown")
     with pytest.raises(NotFoundError, match="HTTP 404"):
         tasks.get_release(999999999)
-
-
-def test_get_latest_release(replay_fixture: ReplayFixture) -> None:
-    route = replay_fixture("release_find_by_identifier", "wasde_page0", match_params=["page"])
-    result = tasks.get_latest_release("wasde")
-    page = releases_of("wasde_page0")
-    assert result.data == max(page, key=lambda release: release.release_datetime)
-    assert result.data.id == "796099"
-    assert result.meta.endpoint == "esmis_api_release_findByIdentifier"
-    assert result.meta.vintage == "796099"
-    assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
-    assert result.meta.request == {"publication_identifier": "wasde"}
-    assert sent_urls(route) == [f"{WASDE_RELEASES}?page=0"]
-
-
-def test_get_latest_release_unknown_is_not_found(replay_fixture: ReplayFixture) -> None:
-    replay_fixture("release_find_by_identifier", "unknown")
-    with pytest.raises(NotFoundError, match="'nope-nope'") as caught:
-        tasks.get_latest_release("nope-nope")
-    assert str(caught.value).endswith(SEARCH_BY_KEYWORD), "the task and its tool (§8)"
 
 
 def test_list_release_files(replay_fixture: ReplayFixture) -> None:
@@ -777,6 +902,10 @@ AUGUST_2013_LISTING = (
     "wasde-08-12-2013.xls (xls), wasde-08-12-2013.xml (xml)"
 )
 """Release 95621's files as a refusal names them."""
+READ_95621 = (
+    "The release was read by GET /api/v1/release/findById/95621, and no file was requested."
+)
+"""What a refusal of a choice says was sent: the release lookup, and no file."""
 
 
 def august_2013() -> Release:
@@ -835,30 +964,28 @@ def test_the_file_is_chosen_by_format_name_or_both(
         (
             "pdf",
             "wasde-08-12-2013.xml",
-            "release 95621's file 'wasde-08-12-2013.xml' has the format 'xml', not 'pdf'; "
-            "pass format='xml' or leave format out",
+            f"release 95621's file 'wasde-08-12-2013.xml' has the format 'xml', not 'pdf'. "
+            f"{READ_95621} Pass format='xml' or leave format out.",
         ),
         (
             None,
             "wasde-08-12-2013.txt",
             f"release 95621 has no file named 'wasde-08-12-2013.txt'; its files: "
-            f"{AUGUST_2013_LISTING}",
+            f"{AUGUST_2013_LISTING}. {READ_95621}",
         ),
         (
             "xml",
             "WASDE-08-12-2013.xml",
             f"release 95621 has no file named 'WASDE-08-12-2013.xml'; its files: "
-            f"{AUGUST_2013_LISTING}",
+            f"{AUGUST_2013_LISTING}. {READ_95621}",
         ),
         (
+            "txt",
             None,
-            None,
-            "name the file of release 95621 to download: pass format, name or both; its "
-            f"files: {AUGUST_2013_LISTING}",
+            f"release 95621 has no 'txt' file; its formats: xls, pdf, xml. {READ_95621}",
         ),
-        ("txt", None, "release 95621 has no 'txt' file; its formats: xls, pdf, xml"),
     ],
-    ids=["name-of-another-format", "unknown-name", "name-as-spelt", "neither", "no-such-format"],
+    ids=["name-of-another-format", "unknown-name", "name-as-spelt", "no-such-format"],
 )
 def test_a_choice_the_release_cannot_serve_is_refused(
     format: str | None, name: str | None, message: str
@@ -968,7 +1095,10 @@ def test_download_release_file_refuses_a_format_the_release_lacks(
     download = replay_fixture("download_release_file", "wasde1026_txt")
     with pytest.raises(InvalidRequestError) as caught:
         tasks.download_release_file(796099, "zip", tmp_path / "wasde1026.zip")
-    assert str(caught.value) == "release 796099 has no 'zip' file; its formats: pdf, txt, xls, xml"
+    assert str(caught.value) == (
+        "release 796099 has no 'zip' file; its formats: pdf, txt, xls, xml. The release was "
+        "read by GET /api/v1/release/findById/796099, and no file was requested."
+    )
     assert sent_urls(download) == []
     assert list(tmp_path.iterdir()) == []
 
@@ -981,10 +1111,10 @@ def test_download_release_file_refuses_neither_format_nor_name(
     with pytest.raises(InvalidRequestError) as caught:
         tasks.download_release_file(796099, dest=tmp_path / "wasde1026.txt")
     assert str(caught.value) == (
-        "name the file of release 796099 to download: pass format, name or both; its files: "
-        "wasde1026.pdf (pdf), wasde1026.txt (txt), wasde1026.xls (xls), wasde1026.xml (xml)"
+        f"name the file of release 796099 to download: pass format, name or both. "
+        f"{NOTHING_SENT} list_release_files lists the release's files with their formats."
     )
-    assert sent_urls(release) == [f"{API}/release/findById/796099"], "the file list"
+    assert sent_urls(release) == [], "refused before the release is looked up"
     assert sent_urls(download) == []
     assert list(tmp_path.iterdir()) == []
 
@@ -992,9 +1122,12 @@ def test_download_release_file_refuses_neither_format_nor_name(
 @pytest.mark.parametrize(
     ("dest", "message"),
     [
-        (None, "dest is required: name the file to write, e.g. 'wasde1026.txt'"),
-        (".", "dest is a directory; name the file to write"),
-        ("missing/wasde1026.txt", "dest's directory does not exist; create it first"),
+        (None, f"dest is required: name the file to write, e.g. 'wasde1026.txt'. {NOTHING_SENT}"),
+        (".", f"dest is a directory; name the file to write. {NOTHING_SENT}"),
+        (
+            "missing/wasde1026.txt",
+            f"dest's directory does not exist; create it first. {NOTHING_SENT}",
+        ),
     ],
     ids=["none", "a-directory", "a-missing-directory"],
 )
@@ -1023,14 +1156,18 @@ async def test_a_bad_dest_is_refused_as_core_refuses_it(
 ) -> None:
     """The task's refusal of a directory or a missing directory is core's ``download``'s.
 
-    Core refuses both with ``InvalidRequestError`` before anything is sent, but only once
-    the task has spent the release lookup, so the task checks first, in core's words.
+    The task checks ``dest`` by core's ``check_dest`` before the release lookup, the check
+    that core's ``download`` makes before it sends, so a bad ``dest`` costs no request and
+    is refused in core's words, ``Nothing was sent.`` among them.
     """
     with pytest.raises(InvalidRequestError) as by_core:
         await client.download(WASDE_TXT, tmp_path / dest)
+    with pytest.raises(InvalidRequestError) as by_check:
+        check_dest(tmp_path / dest, source=SOURCE)
     with pytest.raises(InvalidRequestError) as by_task:
         await tasks.download_release_file_async(796099, "txt", tmp_path / dest)
-    assert str(by_task.value) == str(by_core.value)
+    assert str(by_task.value) == str(by_core.value) == str(by_check.value)
+    assert str(by_task.value).endswith(NOTHING_SENT)
     assert by_task.value.source == by_core.value.source == SOURCE
     assert respx_mock.calls.call_count == 0
     assert list(tmp_path.iterdir()) == []
@@ -1048,7 +1185,7 @@ async def test_the_bulk_task_is_no_tool_and_no_route() -> None:
         served = name not in bulk
         assert (tool_name(SOURCE, fn) in tools) is served, name
         assert (f"/{SOURCE}/{name}" in routes) is served, name
-    assert len(tools) == len(routes) == 9
+    assert len(tools) == len(routes) == 8
 
 
 type McpCase = tuple[str, dict[str, Any], list[tuple[str, str]], list[str], Callable[..., bool]]
@@ -1119,17 +1256,7 @@ MCP_CASES: list[McpCase] = [
             payload["meta"]["vintage"] == "796099"
             and payload["meta"]["published_at"] == "2026-10-09T12:00:00"
             and payload["meta"]["published_at_naive"] is True
-        ),
-    ),
-    (
-        "get_latest_release",
-        {"publication_identifier": "wasde"},
-        [("release_find_by_identifier", "wasde_page0")],
-        [f"{WASDE_RELEASES}?page=0"],
-        lambda payload: (
-            payload["data"]["id"] == payload["meta"]["vintage"] == "796099"
-            and payload["meta"]["published_at"] == "2026-10-09T12:00:00"
-            and payload["meta"]["published_at_naive"] is True
+            and payload["meta"]["names"] == {"agency_acronym": WAOB}
         ),
     ),
     (
@@ -1181,6 +1308,27 @@ async def test_the_list_publications_tool_returns_200_rows_with_the_caps_note(
 
 
 @pytest.mark.anyio
+async def test_the_list_publications_tool_follows_its_note_to_every_row(
+    respx_mock: respx.MockRouter,
+) -> None:
+    """``AMS`` lists 2,008 publications: the note's ``offset`` reads them all, each once."""
+    whole = [row.id for row in tasks.list_publications(agency_acronym="AMS").data]
+    assert len(whole) == 2008
+    seen: list[str] = []
+    offset = 0
+    while True:
+        arguments: dict[str, Any] = {"agency_acronym": "AMS", "offset": offset}
+        payload = await mcp_call(server, "usda_esmis_list_publications", arguments)
+        seen += [row["id"] for row in payload["data"]]
+        found = re.search(r"continue with offset=(\d+)$", payload.get("note") or "")
+        if found is None:
+            break
+        offset = int(found.group(1))
+    assert seen == whole
+    assert respx_mock.calls.call_count == 0, "every page from the packaged table"
+
+
+@pytest.mark.anyio
 async def test_the_list_publications_tool_refuses_an_unknown_acronym_as_text() -> None:
     text = await mcp_call_text(server, "usda_esmis_list_publications", {"agency_acronym": "ers"})
     assert text.startswith("error: UnknownCode: 'ers' is not an agency_acronym")
@@ -1197,6 +1345,7 @@ async def test_the_list_recent_releases_tool_walks_from_since(
     assert [release["id"] for release in payload["data"]] == ["796124"]
     assert payload["meta"]["request"] == {"since": "2026-10-24"}
     assert payload["meta"]["total"] == 1542028
+    assert payload["meta"]["notes"][0].startswith("The walk ended at page 1, the first page")
     assert sent_urls(first) + sent_urls(second) == [
         f"{ALL_RELEASES}?page=0",
         f"{ALL_RELEASES}?page=1",
@@ -1204,15 +1353,19 @@ async def test_the_list_recent_releases_tool_walks_from_since(
 
 
 @pytest.mark.anyio
-async def test_the_list_recent_releases_tool_refuses_without_since_or_page_and_before_the_bound(
-    respx_mock: respx.MockRouter,
+async def test_the_list_recent_releases_tool_refuses_past_the_bound_and_before_the_migration(
+    replay_fixture: ReplayFixture,
 ) -> None:
-    text = await mcp_call_text(server, "usda_esmis_list_recent_releases", {})
-    assert text.startswith("error: InvalidRequestError: pass since or page")
+    route = replay_fixture("release_find_all", "page0", match_params=["page"])
     old = await mcp_call_text(server, "usda_esmis_list_recent_releases", {"since": "2025-09-11"})
     assert old.startswith("error: InvalidRequestError: since (2025-09-11) is before 2025-09-12")
     assert "list_releases" in old
-    assert respx_mock.calls.call_count == 0
+    assert sent_urls(route) == [], "the migration's bound is refused before any request"
+    text = await mcp_call_text(server, "usda_esmis_list_recent_releases", {})
+    assert text.startswith(
+        "error: InvalidRequestError: the walk needs more than the 24 pages that one call fetches"
+    )
+    assert sent_urls(route) == [f"{ALL_RELEASES}?page=0"], "the bound after one request"
 
 
 @pytest.mark.anyio
@@ -1226,29 +1379,6 @@ async def test_a_tool_reports_not_found_as_text(replay_fixture: ReplayFixture) -
     assert text.startswith("error: NotFoundError: ESMIS has no publication")
 
 
-def test_the_package_reads_no_variable() -> None:
-    """``ENV_VARS``, the list a host reads beside ``SOURCE``, is empty: the API is keyless."""
-    assert _client.ENV_VARS == ()
-    assert "ENV_VARS" in _client.__all__
-    assert esmis_mcp.ENV_VARS is _client.ENV_VARS
-
-
-def test_build_is_the_tool_set_the_server_serves() -> None:
-    """A host serves ``build()`` as the entry point does: every task but the bulk one."""
-    tools = esmis_mcp.build()
-    served = [name for name in tasks.__all__ if name not in tasks.BULK_TASKS]
-    assert [task.__name__ for task in tools.tasks] == served
-    assert tools.source == SOURCE
-    assert dict(tools.caps) == dict(tasks.MCP_CAPS)
-
-
 def test_every_task_is_tested_through_the_mcp_server_or_is_bulk() -> None:
     tools = {case[0] for case in MCP_CASES}
     assert tools | tasks.BULK_TASKS == set(tasks.__all__)
-
-
-def test_the_package_re_exports_the_tasks() -> None:
-    import xippios.usda.esmis as package
-
-    for name in tasks.__all__:
-        assert getattr(package, name) is getattr(tasks, name)
