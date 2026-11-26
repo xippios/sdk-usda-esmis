@@ -15,12 +15,13 @@ are arrays, and the list answers carry keys the document does not name. Each mod
 docstring names the fixtures its shape comes from, recorded on 2026-10-27, and
 ``release_find_by_id/95621.json`` on 2026-10-28.
 ``ReleaseFile`` and ``PublicationRow`` are the models the document does not name:
-an item of ``Release.files`` with the name and extension its URL prints, for the file
-tasks, and a projection of ``Publication`` (``UpstreamModel.project``, conventions §3),
+an item of ``Release.files`` with the name and extension its URL prints, for the
+download, and a projection of ``Publication`` (``UpstreamModel.project``, conventions §3),
 the rows of the packaged publication table that ``list_publications`` answers from.
 ``ReleaseFile.from_url`` reads one item and ``Release.release_files`` all of a release's,
-in upstream order: the reading the file tasks use, which the packages that depend on
-this one call rather than copy (sdk-core ADR-0021).
+in upstream order: the reading of the files that ``get_release`` answers, which the
+download uses and the packages that depend on this one call rather than copy (sdk-core
+ADR-0021).
 
 The agency acronyms that a release and a publication carry, ``agency_acronym`` and
 ``publication_agency_export_1``, are marked by ``NamedBy`` with the packaged agency list,
@@ -204,7 +205,8 @@ class Publication(UpstreamModel):
             ``["Market and Trade Economics Division/FDS", "FDS"]``; the
             ``publicationIdentifier`` of ``esmis_api_publication_findByIdentifier`` and
             ``esmis_api_release_findByIdentifier``. One carrying ``/`` cannot be looked
-            up (``tests/fixtures/publication_find_by_identifier/with_slash.json``).
+            up (``tests/fixtures/publication_find_by_identifier/with_slash.json``), and
+            every publication but 654 has another without it.
         upcoming_releases: ``upcoming_releases``, the document's ``date-time``
             strings, parsed into aware datetimes with the offset as printed, e.g.
             ``2026-10-28T15:00:00-0400`` and ``2026-11-04T15:00:00-0500`` for Broiler
@@ -323,7 +325,8 @@ class Release(UpstreamModel):
 
         No request: the name and format come from each URL's text. Release 95621 (WASDE of
         2013-08-12) gives six, ``ORIGwasde-08-12-2013.xml`` before
-        ``wasde-08-12-2013.xml`` among them; ``list_release_files`` answers this list.
+        ``wasde-08-12-2013.xml`` among them. ``get_release`` answers the release, and
+        ``download_release_file`` chooses its file from this list.
         """
         return [ReleaseFile.from_url(url) for url in self.files]
 

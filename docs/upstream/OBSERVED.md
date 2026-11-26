@@ -103,13 +103,14 @@ and `release_find_by_identifier/unknown.json`.
 
 An identifier carrying `/` (`Market and Trade Economics Division/FDS`) cannot be looked
 up: the web server answers `%2F` in a path with its own HTML 404, and a raw slash is no
-route. Every publication recorded with such an identifier has another without it
-(`FDS`).
+route. Of the 71 publications of the walk with such an identifier, 70 have another
+without it (`FDS` beside `Market and Trade Economics Division/FDS`), and publication 654
+has none: its one identifier is `Market Trade Economic Division/SSS-yearbook`.
 
 Probe: 2026-10-27, `esmis_api_publication_findByIdentifier` for
 `Market and Trade Economics Division/FDS`, quoted whole; sample
-`publication_find_by_identifier/with_slash.json`, and the packaged table's row of that
-publication, which lists `FDS` beside it.
+`publication_find_by_identifier/with_slash.json`, and the packaged table's 71 rows with
+an identifier that holds `/`, publication 654's among them.
 
 ## Paging and order
 

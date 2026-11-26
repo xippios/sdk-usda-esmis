@@ -11,7 +11,6 @@ from xippios.usda.esmis.tasks import (
     list_agencies,
     list_publications,
     list_recent_releases,
-    list_release_files,
     list_releases,
     search_publications,
 )
@@ -24,7 +23,6 @@ __all__ = [
     "list_agencies",
     "list_publications",
     "list_recent_releases",
-    "list_release_files",
     "list_releases",
     "search_publications",
 ]
