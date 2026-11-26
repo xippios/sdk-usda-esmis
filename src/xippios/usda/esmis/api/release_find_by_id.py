@@ -9,9 +9,9 @@ answers HTTP 404 ``{"message": ""}`` (``unknown.json``), which ``_client.classif
 as ``NotFoundError``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import ReleaseResults
 
 __all__ = ["release_find_by_id"]
@@ -19,17 +19,19 @@ __all__ = ["release_find_by_id"]
 OPERATION = "esmis_api_release_findById"
 
 
-async def release_find_by_id(release_id: int) -> ReleaseResults:
+async def release_find_by_id(release_id: int) -> Answer[ReleaseResults]:
     """Call ``esmis_api_release_findById``.
 
     Args:
         release_id: ``releaseId``, the number of a ``Release.id``, e.g. ``796099``.
 
     Returns:
-        The ``pager`` and the release, one result.
+        The ``Answer``, when it was retrieved and, as its payload, the ``pager`` and the release,
+        one result.
 
     Raises:
         NotFoundError: No release has this id (HTTP 404).
     """
-    raw = await client.get_json(f"/api/v1/release/findById/{release_id}")
-    return parse(ReleaseResults, raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer(
+        f"/api/v1/release/findById/{release_id}", parse=ReleaseResults, endpoint=OPERATION
+    )

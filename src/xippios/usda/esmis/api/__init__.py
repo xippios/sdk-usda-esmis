@@ -10,6 +10,10 @@ constant ``esmis_api_`` prefix, the API's namespace, which ``xippios.usda.esmis.
 already is: ``esmis_api_publication_findByIdentifier`` is
 ``publication_find_by_identifier``. Each module's docstring names the full operationId
 and path, and ``parse`` names the full operationId in its errors.
+
+Each wrapper reads its answer with the client's ``get_answer`` and returns core's ``Answer``:
+the parsed model as its ``payload`` and the time it was retrieved, which a task puts into its
+``meta.retrieved_at`` (conventions §4, §6; sdk-core ADR-0037).
 """
 
 from xippios.usda.esmis.api.agency_find_all import agency_find_all

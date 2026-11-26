@@ -6,7 +6,6 @@ Upstream: USDA ESMIS.
 from xippios.usda.esmis._version import __version__
 from xippios.usda.esmis.tasks import (
     download_release_file,
-    get_latest_release,
     get_publication,
     get_release,
     list_agencies,
@@ -20,7 +19,6 @@ from xippios.usda.esmis.tasks import (
 __all__ = [
     "__version__",
     "download_release_file",
-    "get_latest_release",
     "get_publication",
     "get_release",
     "list_agencies",

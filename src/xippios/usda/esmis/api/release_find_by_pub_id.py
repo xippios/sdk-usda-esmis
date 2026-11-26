@@ -11,9 +11,9 @@ the latest ``release_datetime`` first). An unknown publication id answers HTTP 4
 ``NotFoundError``, not an empty page.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import ReleaseResults
 
 __all__ = ["release_find_by_pub_id"]
@@ -21,7 +21,7 @@ __all__ = ["release_find_by_pub_id"]
 OPERATION = "esmis_api_release_findByPubId"
 
 
-async def release_find_by_pub_id(publication_id: int, page: int = 0) -> ReleaseResults:
+async def release_find_by_pub_id(publication_id: int, page: int = 0) -> Answer[ReleaseResults]:
     """Call ``esmis_api_release_findByPubId``.
 
     Args:
@@ -30,11 +30,13 @@ async def release_find_by_pub_id(publication_id: int, page: int = 0) -> ReleaseR
         page: ``page``, 0-based, upstream's default ``0``, e.g. ``0``.
 
     Returns:
-        The page's ``pager`` and its releases.
+        The ``Answer``, when it was retrieved and, as its payload, the page's ``pager`` and its
+        releases.
 
     Raises:
         NotFoundError: No publication has this id (HTTP 404).
     """
     path = f"/api/v1/release/findByPubId/{publication_id}"
-    raw = await client.get_json(path, params={"page": page})
-    return parse(ReleaseResults, raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer(
+        path, params={"page": page}, parse=ReleaseResults, endpoint=OPERATION
+    )

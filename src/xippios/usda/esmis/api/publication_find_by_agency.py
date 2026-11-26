@@ -12,9 +12,9 @@ an unknown acronym answers HTTP 200 with empty ``results`` and every pager count
 
 from urllib.parse import quote
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import PublicationResults
 
 __all__ = ["publication_find_by_agency"]
@@ -22,7 +22,9 @@ __all__ = ["publication_find_by_agency"]
 OPERATION = "esmis_api_publication_findByAgency"
 
 
-async def publication_find_by_agency(agency_acronym: str, page: int = 0) -> PublicationResults:
+async def publication_find_by_agency(
+    agency_acronym: str, page: int = 0
+) -> Answer[PublicationResults]:
     """Call ``esmis_api_publication_findByAgency``.
 
     Args:
@@ -31,8 +33,10 @@ async def publication_find_by_agency(agency_acronym: str, page: int = 0) -> Publ
         page: ``page``, 0-based, upstream's default ``0``, e.g. ``0``.
 
     Returns:
-        The page's ``pager`` and its publications.
+        The ``Answer``, when it was retrieved and, as its payload, the page's ``pager`` and its
+        publications.
     """
     path = f"/api/v1/publication/findByAgency/{quote(agency_acronym, safe='')}"
-    raw = await client.get_json(path, params={"page": page})
-    return parse(PublicationResults, raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer(
+        path, params={"page": page}, parse=PublicationResults, endpoint=OPERATION
+    )

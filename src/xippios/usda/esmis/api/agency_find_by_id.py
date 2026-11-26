@@ -9,9 +9,9 @@ HTTP 404 ``{"message": ""}`` (``unknown.json``), which ``_client.classify`` rais
 ``NotFoundError``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import Agency
 
 __all__ = ["agency_find_by_id"]
@@ -19,7 +19,7 @@ __all__ = ["agency_find_by_id"]
 OPERATION = "esmis_api_agency_findById"
 
 
-async def agency_find_by_id(agency_id: int) -> list[Agency]:
+async def agency_find_by_id(agency_id: int) -> Answer[list[Agency]]:
     """Call ``esmis_api_agency_findById``.
 
     Args:
@@ -27,10 +27,12 @@ async def agency_find_by_id(agency_id: int) -> list[Agency]:
             ``4`` (NASS).
 
     Returns:
-        The matching agencies as upstream lists them, one as recorded.
+        The ``Answer``, when it was retrieved and, as its payload, the matching agencies as upstream
+        lists them, one as recorded.
 
     Raises:
         NotFoundError: No agency has this id (HTTP 404).
     """
-    raw = await client.get_json(f"/api/v1/agency/findById/{agency_id}")
-    return parse(list[Agency], raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer(
+        f"/api/v1/agency/findById/{agency_id}", parse=list[Agency], endpoint=OPERATION
+    )

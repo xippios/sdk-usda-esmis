@@ -11,9 +11,9 @@ URL-quoted with ``safe=""``, so a space or a slash stays inside its path segment
 
 from urllib.parse import quote
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import Agency
 
 __all__ = ["agency_find_by_acronym"]
@@ -21,7 +21,7 @@ __all__ = ["agency_find_by_acronym"]
 OPERATION = "esmis_api_agency_findByAcronym"
 
 
-async def agency_find_by_acronym(agency_acronym: str) -> list[Agency]:
+async def agency_find_by_acronym(agency_acronym: str) -> Answer[list[Agency]]:
     """Call ``esmis_api_agency_findByAcronym``.
 
     Args:
@@ -29,9 +29,8 @@ async def agency_find_by_acronym(agency_acronym: str) -> list[Agency]:
             ``"NASS"``.
 
     Returns:
-        The matching agencies as upstream lists them, one as recorded, none for an
-        unknown acronym.
+        The ``Answer``, when it was retrieved and, as its payload, the matching agencies as upstream
+        lists them, one as recorded, none for an unknown acronym.
     """
     path = f"/api/v1/agency/findByAcronym/{quote(agency_acronym, safe='')}"
-    raw = await client.get_json(path)
-    return parse(list[Agency], raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer(path, parse=list[Agency], endpoint=OPERATION)

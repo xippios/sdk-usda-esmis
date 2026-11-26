@@ -2,9 +2,14 @@
 
 The catalog is keyless and sends no rate-limit or quota headers, so the client keeps a
 self-imposed pace and installs no ``QuotaPolicy`` (sdk-core ADR-0033, sdk-core ADR-0037).
-``classify`` maps the catalog's answers to an unknown id and to an identifier carrying
-``/`` once (sdk-core ADR-0031); every other answer falls through to core's status
-mapping, so the endpoint wrappers never inspect a status code.
+It keeps upstream's answers in core's response cache, ``MemoryCache`` at core's default
+lifetime of 300 s for every path, since the package only reads public data (conventions §6;
+sdk-core ADR-0061, decision 11): a second call of a task within that time sends no request,
+and its ``meta.retrieved_at`` is the time the first answer was stored. A file that
+``download_release_file`` streams is never kept. ``classify`` maps the catalog's answers to
+an unknown id and to an identifier carrying ``/`` once (sdk-core ADR-0031); every other
+answer falls through to core's status mapping, so the endpoint wrappers never inspect a
+status code.
 """
 
 import httpx
@@ -13,6 +18,7 @@ from xippios.core import (
     ClientConfig,
     EnvVar,
     InvalidRequestError,
+    MemoryCache,
     NotFoundError,
     RateLimit,
     XippiosError,
@@ -25,7 +31,6 @@ SOURCE = "usda-esmis"
 BASE_URL = "https://esmis.nal.usda.gov"
 """The host root; every catalog path keeps its ``/api/v1/`` prefix, as the OpenAPI
 document's ``paths`` name it (its one server is ``https://esmis.nal.usda.gov``)."""
-API_KEY_ENV: str | None = None
 ENV_VARS: tuple[EnvVar, ...] = ()
 """The variables the package reads, for a host (conventions §7; sdk-core ADR-0026, amendment
 2026-11-18, point c): none, as the API is keyless. An ``EnvVar`` names a variable and reads
@@ -138,13 +143,13 @@ config = ClientConfig(
     version=__version__,
     base_url=BASE_URL,
     rate_limit=RATE_LIMIT,
+    cache=MemoryCache(),
     classify=classify,
 )
 
 client = AsyncClient(config)
 
 __all__ = [
-    "API_KEY_ENV",
     "API_PREFIX",
     "BASE_URL",
     "ENV_VARS",

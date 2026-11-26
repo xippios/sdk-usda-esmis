@@ -10,9 +10,9 @@ digits; the response ``PublicationResults``, a pager and one result as recorded
 ``NotFoundError``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import PublicationResults
 
 __all__ = ["publication_find_by_id"]
@@ -20,7 +20,7 @@ __all__ = ["publication_find_by_id"]
 OPERATION = "esmis_api_publication_findById"
 
 
-async def publication_find_by_id(publication_id: int) -> PublicationResults:
+async def publication_find_by_id(publication_id: int) -> Answer[PublicationResults]:
     """Call ``esmis_api_publication_findById``.
 
     Args:
@@ -28,10 +28,14 @@ async def publication_find_by_id(publication_id: int) -> PublicationResults:
             ``1659`` (WASDE).
 
     Returns:
-        The ``pager`` and the publication, one result.
+        The ``Answer``, when it was retrieved and, as its payload, the ``pager`` and the
+        publication, one result.
 
     Raises:
         NotFoundError: No publication has this id (HTTP 404).
     """
-    raw = await client.get_json(f"/api/v1/publication/findById/{publication_id}")
-    return parse(PublicationResults, raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer(
+        f"/api/v1/publication/findById/{publication_id}",
+        parse=PublicationResults,
+        endpoint=OPERATION,
+    )

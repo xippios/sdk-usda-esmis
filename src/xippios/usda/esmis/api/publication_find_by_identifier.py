@@ -17,9 +17,9 @@ either (probed 2026-10-27): an identifier carrying ``/`` cannot be looked up.
 
 from urllib.parse import quote
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import PublicationResults
 
 __all__ = ["publication_find_by_identifier"]
@@ -27,7 +27,7 @@ __all__ = ["publication_find_by_identifier"]
 OPERATION = "esmis_api_publication_findByIdentifier"
 
 
-async def publication_find_by_identifier(publication_identifier: str) -> PublicationResults:
+async def publication_find_by_identifier(publication_identifier: str) -> Answer[PublicationResults]:
     """Call ``esmis_api_publication_findByIdentifier``.
 
     Args:
@@ -35,12 +35,11 @@ async def publication_find_by_identifier(publication_identifier: str) -> Publica
             ``Publication.identifier``, e.g. ``"wasde"``, ``"FDS"``, ``"CropProg"``.
 
     Returns:
-        The ``pager`` and the matching publications, one as recorded, none for an
-        unknown identifier.
+        The ``Answer``, when it was retrieved and, as its payload, the ``pager`` and the matching
+        publications, one as recorded, none for an unknown identifier.
 
     Raises:
         InvalidRequestError: The identifier carries ``/``, which ESMIS refuses.
     """
     path = f"/api/v1/publication/findByIdentifier/{quote(publication_identifier, safe='')}"
-    raw = await client.get_json(path)
-    return parse(PublicationResults, raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer(path, parse=PublicationResults, endpoint=OPERATION)
