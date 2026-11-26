@@ -779,6 +779,25 @@ def test_list_recent_releases_refuses_before_any_request(
     assert respx_mock.calls.call_count == 0, "refused before any request"
 
 
+def test_a_walk_from_since_is_refused_after_24_requests(replay_fixture: ReplayFixture) -> None:
+    """A walk from ``since`` runs its stop rule, so core refuses it at the bound, not before.
+
+    NOT RECORDED at pages 1 to 23: page 0 of ``release_find_all`` as recorded on 2026-10-27,
+    replayed at its own path for the other pages, where its newest release, dated
+    2026-10-26, never ends a walk from 2026-10-24, a test that asserts what was sent and the
+    refusal (conventions §10, kind 3).
+    """
+    route = replay_fixture("release_find_all", "page0")
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks.list_recent_releases(since=date(2026, 10, 24))
+    assert str(caught.value) == (
+        "the walk needs more than the 24 pages that one call fetches: upstream counts "
+        "1,542,025 records on 61,681 pages of 25, and the walk reached page 24 of 61,681 after "
+        "24 requests. It returns nothing; pass page to fetch one page at a time."
+    )
+    assert sent_urls(route) == [f"{ALL_RELEASES}?page={page}" for page in range(24)]
+
+
 @pytest.mark.parametrize(
     "arguments", [{}, {"until": date(2026, 10, 23)}], ids=["neither", "until-alone"]
 )
