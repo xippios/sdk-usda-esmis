@@ -153,10 +153,11 @@ where it changes them.
   than 14 days (`tasks.ORDER_TOLERANCE`, the largest gap on findAll's two recorded pages)
   before `since`, as its dates only mostly follow the id order (Order, above); the two
   stop rules are passed only where `since` is given. A walk that needs more than 24 pages
-  is refused with core's `InvalidRequestError`, after its first request where upstream's
-  count shows it, naming the count, the bound and `page`: `list_releases("wasde")` without
-  `since`, 703 releases on 29 pages, and `list_recent_releases` without `since`, or with
-  `until` alone. Each walk drops a release or a publication that two pages list, and
+  is refused with core's `InvalidRequestError`, naming the count, the bound and `page`:
+  after its first request where upstream's count shows it, as for `list_releases("wasde")`
+  without `since`, 703 releases on 29 pages, and `list_recent_releases` without `since`, or
+  with `until` alone, and after its 24th where a walk from `since` reaches no page that
+  ends it within them. Each walk drops a release or a publication that two pages list, and
   refuses a page whose `pager.items_per_page` is not 25
   (https://github.com/xippios/sdk-usda-esmis/issues/27), and `list_recent_releases` names
   in `meta.notes` the rule that ended its walk. `list_recent_releases` walks only from a

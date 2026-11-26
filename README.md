@@ -45,9 +45,11 @@ txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 `list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, newest first.
 `list_recent_releases(since=date(2026, 10, 20))` lists what USDA released across every
 publication since a date, latest catalogued first. A walk of pages sends at most 24
-requests, in Python and over MCP alike, and one that needs more is refused after its first
-request, naming `page`: `list_releases("wasde")` without `since` among them, WASDE's 703
-releases filling 29 pages, and `list_recent_releases` without `since`. A walk from a
+requests, in Python and over MCP alike, and one that needs more is refused and returns
+nothing, naming `page`: after its first request where upstream's count shows it, as for
+`list_releases("wasde")` without `since`, WASDE's 703 releases filling 29 pages, and
+`list_recent_releases` without `since`, and after its 24th where a walk from `since`
+reaches no page that ends it within them. A walk from a
 `since` before 2025-09-12, ESMIS's migration, is refused before any request, as the older
 ids do not follow the release dates; `list_releases` or `page` serves older dates. A
 second call within 300 seconds is answered from the client's cache, its
