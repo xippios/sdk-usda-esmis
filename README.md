@@ -8,6 +8,39 @@ upstream documentation; every response carries its metadata (source, endpoint,
 retrieved_at, request), and an answer about one release its release time and id as
 published_at and vintage.
 
+## Scope
+
+Of ESMIS's API the package wraps seven of the twelve operations that its OpenAPI document
+lists (`docs/upstream/`): the agencies, the publications found by keyword or by an
+identifier, a publication's releases, the releases of every publication, and one release
+with its files, which `download_release_file` downloads. Six are read live, and the
+seventh, `esmis_api_publication_findAll`, the package ships as its table of every
+publication, refreshed before each release, which `list_publications` answers from. The
+tasks take every parameter that the document lists for an operation they read but one. A
+documented choice that a caller cannot make yet, and each operation without a task, stand
+here with their public issue (sdk-core ADR-0060, decision 8):
+
+- `page` of `esmis_api_publication_findAll`: the package ships every page as its table, so
+  no caller sets it, and a live list of every publication with all its fields waits for a
+  task (https://github.com/xippios/sdk-usda-esmis/issues/23).
+- `esmis_api_publication_findByAgency`, an agency's publications page by page, which
+  `list_publications(agency_acronym=...)` answers from the packaged table meanwhile
+  (https://github.com/xippios/sdk-usda-esmis/issues/23).
+- `esmis_api_publication_findById` and `esmis_api_release_findByPubId`, a publication and
+  its releases by the publication's id, where `get_publication` and `list_releases` take
+  one of its identifiers; publication 654, whose one identifier holds a `/` that ESMIS's
+  web server refuses, has no other way in
+  (https://github.com/xippios/sdk-usda-esmis/issues/22).
+- `esmis_api_agency_findByAcronym` and `esmis_api_agency_findById`, one agency by its
+  acronym or its id, where `list_agencies` answers all of them in one request
+  (https://github.com/xippios/sdk-usda-esmis/issues/24).
+
+What the package adds is a walk of a list's pages under one bound, filters that keep the
+releases of a list by their printed date, and filters that select rows of the packaged
+table by text or by agency. It parses no released file (sdk-core ADR-0020) and picks no
+latest release for the caller: the first row of `list_releases(identifier, page=0)` is the
+publication's latest, as ESMIS lists them.
+
 ## Install
 
 ```bash
