@@ -89,9 +89,14 @@ def noted(page: Page, response: Response) -> str:
 
 
 def committed_note(url: str) -> str:
-    """The note of ``url``'s row in the committed ``FETCHED.md``, its last cell."""
+    """The note of ``url``'s row in the committed ``FETCHED.md``, its last cell.
+
+    The frame ends a row with an ETag in a comment for the secret scan, after the table's
+    last ``|``, which is no cell (sdk-core ADR-0062, decision 7).
+    """
     rows = (UPSTREAM / "FETCHED.md").read_text(encoding="utf-8").splitlines()
     (row,) = [line for line in rows if line.startswith("| ") and f" | {url} | " in line]
+    row = re.sub(r"\s*<!--.*-->$", "", row)
     return row.removesuffix(" |").rsplit(" | ", 1)[-1]
 
 
