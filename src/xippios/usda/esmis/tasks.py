@@ -555,8 +555,9 @@ async def get_publication_async(publication_identifier: str) -> Result[Publicati
     know raises ``NotFoundError``; upstream answers it with an empty result. Pass an
     identifier without ``/``: ESMIS's web server refuses one with it, raised as
     ``InvalidRequestError``, and every publication but publication 654 has another without
-    it (``"FDS"`` beside ``"Market and Trade Economics Division/FDS"``).
-    ``upcoming_releases`` print Eastern offsets as upstream gives them.
+    it (``"FDS"`` beside ``"Market and Trade Economics Division/FDS"``). An identifier that
+    two publications share, as ``"AMS_1045"`` is, raises ``InvalidRequestError`` naming both
+    ids. ``upcoming_releases`` print Eastern offsets as upstream gives them.
 
     Args:
         publication_identifier: One of a publication's ``identifier`` values, as
@@ -569,6 +570,15 @@ async def get_publication_async(publication_identifier: str) -> Result[Publicati
             f"ESMIS has no publication with the identifier {publication_identifier!r}: GET "
             f"{_path('publication/findByIdentifier', publication_identifier)} answered no "
             f"result; {SEARCH_BY_KEYWORD}",
+            source=SOURCE,
+        )
+    if len(answer.payload.results) > 1:
+        ids = [publication.id for publication in answer.payload.results]
+        raise InvalidRequestError(
+            f"ESMIS answered GET {_path('publication/findByIdentifier', publication_identifier)} "
+            f"with {len(ids)} publications, {', '.join(ids[:-1])} and {ids[-1]}, so the "
+            f"identifier names no one publication and none is returned; {SEARCH_BY_KEYWORD}, "
+            "and its answer holds each publication whole.",
             source=SOURCE,
         )
     request = {"publication_identifier": publication_identifier}

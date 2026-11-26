@@ -112,6 +112,24 @@ Probe: 2026-10-27, `esmis_api_publication_findByIdentifier` for
 `publication_find_by_identifier/with_slash.json`, and the packaged table's 71 rows with
 an identifier that holds `/`, publication 654's among them.
 
+### An identifier that two publications share answers both
+
+`/publication/findByIdentifier` answers an identifier that two publications list with
+both: `AMS_1045` answered publications 1443, which lists `AMS_1045` alone, and 2064, which
+lists `MD_DA530` and `AMS_1045`, both titled `Dry Whey - Central U.S.`, with
+`total_results` 2. `/release/findByIdentifier` answers the releases of both publications
+in one list, latest first: for `AMS_1045` it counted 706 on 29 pages, and its page 0 held
+release 794730 of 2025-09-26, which carries `AMS_1045` alone, before releases 420677 to
+420688 of 2025-08-18 back to 2025-06-02, which carry both identifiers. Each release stood
+on the page once for each agency acronym of its publication, `AMS` and `AMS-DA`, the two
+rows alike but for `agency_acronym`, so the page's 25 rows held 13 releases, and the
+pager counts rows. The packaged table lists 94 identifiers that two publications share.
+
+Probe: 2026-11-26, `esmis_api_publication_findByIdentifier` and
+`esmis_api_release_findByIdentifier`, page 0, for `AMS_1045`, one request each and
+without a key; no sample is recorded, since the adoption adds no fixture, and the
+packaged table's rows of publications 1443 and 2064 list the identifier.
+
 ## Paging and order
 
 ### A page holds 25 items, and a page past the last is empty
