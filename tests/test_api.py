@@ -509,9 +509,11 @@ async def test_publication_find_by_identifier_with_a_slash(replay_fixture: Repla
         "ESMIS's web server refused GET /api/v1/publication/findByIdentifier/"
         "Market%20and%20Trade%20Economics%20Division%2FFDS with HTTP 404: it does not "
         "accept an encoded slash (%2F) in a path, so a value carrying '/' cannot be looked "
-        "up. Pass one without '/'; a publication can also be found by another of its "
-        "identifiers or by its id."
+        "up. Pass another of the publication's identifiers, as list_publications (over MCP, "
+        "the tool usda_esmis_list_publications) lists them: every publication but 654 has one "
+        "without '/'."
     )
+    assert "by its id" not in str(info.value), "no lookup that no task has"
     assert "esmis.nal.usda.gov" not in str(info.value)
     fixture = load_fixture(FIXTURES / "publication_find_by_identifier" / "with_slash.json")
     assert fixture.response.status == 404
