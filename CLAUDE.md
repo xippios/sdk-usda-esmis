@@ -75,95 +75,90 @@ where it changes them.
 
 - **Reference.** `docs/upstream/openapi/esmis_public_api.yaml` (OpenAPI 3.0.0, twelve
   GET operations) is the reference for operation names, paths, parameters and schema
-  names. Where the live API answers differently, the wire wins for types;
-  `docs/upstream/OBSERVED.md` lists the differences, each with the probe that showed it,
-  and `models.py` and `tests/fixtures/` show them.
+  names. Where the live API answers differently, the wire wins for types, and
+  `models.py` and `tests/fixtures/` show it. What ESMIS does that the document does not
+  state stands in `docs/upstream/OBSERVED.md` once, each note with the probe that showed
+  it: the wire's types, the absence answers, the identifiers with a `/` or of two
+  publications, the pages, the order of the catalog, the release times, the files, the
+  cache headers and the test releases. This section holds what the package does with it
+  and cites a note by its heading.
 - **Wrappers.** Every operation sits under `/api/v1/` on `https://esmis.nal.usda.gov`. A
   module and its function are the operationId snake_cased without the constant
   `esmis_api_` prefix (`esmis_api_release_findByPubId` is `api.release_find_by_pub_id`),
   since `xippios.usda.esmis.api` already is that namespace; the tasks name the full
   operationId in `meta.endpoint`. Path parameters are quoted whole (`safe=""`); the id
-  parameters are integers, as the document types them, while every `id` in an answer is
-  a string. Release `files` are absolute URLs on the same host.
-- **Pagination.** `page` is 0-based with 25 items a page, a size no documented parameter
-  changes; `pager.total_results` is upstream's count, the value for `meta.total`
-  (sdk-core ADR-0034). A page past the last answers empty `results` with `current_page`
-  clamped to the last page. `publication_search` with an empty `query` answers
-  `"pager": []`, which `PublicationResults.pager` takes as `()`.
-- **Order**, observed, not documented. `/release/findAll` lists the highest id first.
-  Since ESMIS's migration, whose first WASDE release is 791996 of 2025-09-12, the ids
-  follow creation: the newest created first, not the newest released. On findAll's two
-  recorded pages (page 0 of 2026-10-27 runs 2026-10-26, 2026-10-09, 2026-10-23, page 1
-  of 2026-10-28 runs 2026-10-09, 2026-09-28, 2026-10-07) the largest gap between that
-  order and the dates is 14 days, release 796123 against 796122. Below the migration the
-  ids, 96171 and lower for WASDE, do not follow the dates: WASDE's 96165 to 96171 run
-  May, April, March, February, August, July and June 2025, 95482 to 95486 rise while the
-  dates fall, and 95511 (2022-08-12) and 95621 (2013-08-12) sit above 95482
-  (2025-01-10). `list_recent_releases` walks the new ids only: it takes the 14 days as
-  its tolerance (`tasks.ORDER_TOLERANCE`) and refuses a walk from a `since` before
-  2025-09-12 (`tasks.CATALOG_ORDER_SINCE`); the order beyond findAll's two pages is read
-  from the WASDE recordings, not probed, and the live test checks the id order of page 0
-  nightly. Within a publication ESMIS lists the releases latest `release_datetime`
-  first, whatever their ids, as recorded on WASDE's pages 0 and 1
-  (`release_find_by_identifier/wasde_page0.json`, `wasde_page1.json`). `list_releases`
-  relies on that order and says so in its docstring: the first row of its `page=0` is the
-  publication's latest release; the live test
-  `test_page_zero_of_a_publication_is_newest_first` checks it nightly. Publication
-  lists follow no id order.
-- **The publication walk** (2026-10-27, `/publication/findAll` pages 0 to 100, 101
-  calls): 2522 publications, ids distinct strings of digits, every `Publication` field
-  on all of them but `publication_agency_export_1` (on none). `status`, `subscribable`
-  and `resource_type` hold only the document's values and are `StrEnum`; `frequency`
-  stays `str`, since publication 1172 prints `""`. 24 publications list
-  `upcoming_releases`, 67 times in all, each with an Eastern offset.
-- **Absence and refusals** (`_client.classify`), as recorded per lookup. An unknown id
-  answers HTTP 404 `{"message": ""}`, raised as `NotFoundError`, at `agency/findById`,
-  `publication/findById`, `release/findById` and `release/findByPubId`. An unknown name
-  answers HTTP 200 with nothing: `agency/findByAcronym` an empty array,
-  `publication/findByAgency`, `publication/findByIdentifier` and
-  `release/findByIdentifier` empty `results` with every pager count 0. The wrappers
-  return those as such; the tasks that return one record raise `NotFoundError` for them
-  (`get_publication`; `get_release` through `classify`), and
-  `list_releases`, a list task, returns the empty list with `meta.total` 0. An
-  identifier carrying `/` (`Market and Trade Economics Division/FDS`) cannot be looked
-  up: ESMIS's web server refuses `%2F` with an HTML 404, raised as
-  `InvalidRequestError`, and a raw slash is no route; the publications recorded with one
-  carry another identifier without it (`FDS`).
-- **Release times.** The API prints `release_datetime` with `+0000`, but upstream's own
-  calendar and file times put the release at noon Eastern (`docs/upstream/OBSERVED.md`,
-  the zone label of release times), and `Publication.upcoming_releases` print Eastern
-  offsets (`2026-10-28T15:00:00-0400`, `2026-11-04T15:00:00-0500`), which the model
-  keeps. As https://github.com/xippios/sdk-usda-esmis/pull/5 decided,
-  `Release.release_datetime` keeps the time as printed, an aware datetime at `+00:00`;
-  the three tasks about one release (`get_release`, `list_release_files`,
-  `download_release_file`) set `meta.published_at` to that time
+  parameters are integers, as the document types them, and the models keep each `id` of
+  an answer a string ("Every `id` is a string").
+- **Pagination.** `tasks.PAGE_SIZE` is 25, a size no documented parameter changes ("A page
+  holds 25 items, and a page past the last is empty"), and `pager.total_results` is
+  upstream's count, the value for `meta.total` (sdk-core ADR-0034).
+  `PublicationResults.pager` takes the `"pager": []` of a search without a query as `()`
+  ("`/publication/search` without a query").
+- **Order.** `list_recent_releases` walks `/release/findAll` in its id order and takes the
+  largest gap between that order and the dates on the two recorded pages, 14 days, as its
+  tolerance (`tasks.ORDER_TOLERANCE`), and it refuses a walk from a `since` before
+  2025-09-12, ESMIS's migration, below which the ids do not follow the dates
+  (`tasks.CATALOG_ORDER_SINCE`; "`/release/findAll` lists the highest id first"). The order
+  beyond the two pages is read from the WASDE recordings, not probed, and the live test
+  checks the id order of page 0 nightly. `list_releases` relies on a publication's
+  releases coming latest first ("A publication's releases come latest first") and says so
+  in its docstring: the first row of its `page=0` is the publication's latest release; the
+  live test `test_page_zero_of_a_publication_is_newest_first` checks it nightly.
+- **Enumerations.** `status`, `subscribable` and `resource_type` of `Publication` are
+  `StrEnum`s written by hand in `models.py`, which
+  `test_the_enumerations_written_by_hand_follow_the_document` holds against the
+  document's `enum`; `frequency` stays `str` ("`frequency` outside its enumeration").
+- **Absence and refusals** (`_client.classify`, "Absence answers differ per lookup"). An
+  unknown id's HTTP 404 is `NotFoundError`; the empty answer to an unknown name the
+  wrappers return as such. `get_publication` raises `NotFoundError` for an identifier
+  ESMIS does not know, and `InvalidRequestError` for one that two publications share,
+  naming both ids and `search_publications` ("An identifier that two publications share
+  answers both"); `get_release` raises through `classify`; and `list_releases`, a list
+  task, returns the empty list with `meta.total` 0 and a note that names
+  `search_publications`. The web server's HTML 404 for a path with `%2F` is
+  `InvalidRequestError`, whose message names `list_publications`, since every publication
+  but 654 has an identifier without a `/` ("An identifier carrying `/` cannot be looked
+  up"); the README's `## Scope` names the lookup by publication id that would reach 654
+  (https://github.com/xippios/sdk-usda-esmis/issues/22).
+- **Release times** ("The zone label of release times"). As
+  https://github.com/xippios/sdk-usda-esmis/pull/5 decided, `Release.release_datetime`
+  keeps the time as printed, an aware datetime at `+00:00`, and
+  `Publication.upcoming_releases` keep their Eastern offsets; the two tasks about one
+  release (`get_release`, `download_release_file`) set `meta.published_at` to that time
   with the offset dropped (`.replace(tzinfo=None)`, the printed wall-clock time, never
   converted) and `published_at_naive=True` (sdk-core ADR-0041, decision 2); the list tasks
   leave it empty. `meta.vintage` is the release id.
-- **Tasks.** Nine: eight are the contract of `xippios-usda-wasde` (sdk-core ADR-0021),
-  `list_publications` answers from the packaged table (next item), and
-  `list_recent_releases` lists every publication's releases from
-  `esmis_api_release_findAll`. A paged task given `page` returns that page; without it,
-  core's `fetch_pages` walks the pages from 0 (`page = offset // 25`) under one bound,
-  `tasks.WALK_PAGES`, 24 pages, for Python and MCP alike (sdk-core ADR-0034, amendment
-  2026-11-24; https://github.com/xippios/sdk-cashctrl/issues/135, part 4), and upstream's
-  count, never the echoed `current_page`: a walk ends at a short page, at upstream's count,
-  for `list_releases` after the first page whose oldest release is dated before `since`,
-  and for `list_recent_releases` after the first page whose newest release is dated more
-  than 14 days (`tasks.ORDER_TOLERANCE`, the largest gap on findAll's two recorded pages)
-  before `since`, as its dates only mostly follow the id order (Order, above); the two
-  stop rules are passed only where `since` is given. A walk that needs more than 24 pages
-  is refused with core's `InvalidRequestError`, naming the count, the bound and `page`:
-  after its first request where upstream's count shows it, as for `list_releases("wasde")`
-  without `since`, 703 releases on 29 pages, and `list_recent_releases` without `since`, or
-  with `until` alone, and after its 24th where a walk from `since` reaches no page that
-  ends it within them. Each walk drops a release or a publication that two pages list, and
-  refuses a page whose `pager.items_per_page` is not 25
-  (https://github.com/xippios/sdk-usda-esmis/issues/27), and `list_recent_releases` names
-  in `meta.notes` the rule that ended its walk. `list_recent_releases` walks only from a
-  `since` on or after 2025-09-12 (`tasks.CATALOG_ORDER_SINCE`, ESMIS's migration; Order,
-  above): an older `since` without `page` is refused with `InvalidRequestError` before any
-  request, naming `list_releases` and `page` (decided in
+- **Tasks.** Eight, `tasks.__all__`. `xippios-usda-wasde` 0.2.0 calls three tasks of
+  0.3.0, `list_releases` and `download_release_file`, which stay, and
+  `get_latest_release`, which 0.4.0 removed with the tasks that pick the latest release
+  (sdk-core ADR-0060, decision 8), and reads `Release.release_files()` and `ReleaseFile`
+  (sdk-core ADR-0021); a change of what it calls or reads breaks it. What identifies a
+  record is positional, in the order of upstream's path, and every other argument is
+  keyword-only (https://github.com/xippios/sdk-usda-esr/issues/60, part 1):
+  `list_publications(*, search=None, agency_acronym=None)`,
+  `search_publications(query, *, page=None)`, `get_publication(publication_identifier)`,
+  `list_releases(publication_identifier, *, since=None, until=None, page=None)`,
+  `list_recent_releases(*, since=None, until=None, page=None)`, `get_release(release_id)`
+  and `download_release_file(release_id, *, dest, format=None, name=None)`. A paged task
+  given `page` returns that page; without it, core's `fetch_pages` walks the pages from 0
+  (`page = offset // 25`) under one bound, `tasks.WALK_PAGES`, 24 pages, for Python and
+  MCP alike (sdk-core ADR-0034, amendment 2026-11-24;
+  https://github.com/xippios/sdk-cashctrl/issues/135, part 4), and upstream's count, never
+  the echoed `current_page`: a walk ends at a short page, at upstream's count, for
+  `list_releases` after the first page whose oldest release is dated before `since`, and
+  for `list_recent_releases` after the first page whose newest release is dated more than
+  `tasks.ORDER_TOLERANCE` before `since` (Order, above); the two stop rules are passed
+  only where `since` is given. A walk that needs more than 24 pages is refused with core's
+  `InvalidRequestError`, naming the count, the bound and `page`: after its first request
+  where upstream's count shows it, as for `list_releases("wasde")` without `since`, and
+  `list_recent_releases` without `since`, or with `until` alone, and after its 24th where
+  a walk from `since` reaches no page that ends it within them. Each walk drops a release
+  or a publication that two pages list, and refuses a page whose `pager.items_per_page`
+  is not 25 (https://github.com/xippios/sdk-usda-esmis/issues/27), and
+  `list_recent_releases` names in `meta.notes` the rule that ended its walk.
+  `list_recent_releases` walks only from a `since` on or after
+  `tasks.CATALOG_ORDER_SINCE`: an older `since` without `page` is refused with
+  `InvalidRequestError` before any request, naming `list_releases` and `page` (decided in
   https://github.com/xippios/sdk-usda-esmis/pull/11). With `page` given, `since` and
   `until` only filter that page, whatever their dates. `list_releases` and
   `list_recent_releases` filter `since` and `until` on the printed date of
@@ -171,19 +166,20 @@ where it changes them.
   holds no filter that keeps its bounds' days, and their `meta.total` is upstream's count
   before that filter. Every refusal before the first request says `Nothing was sent.`, and
   one after the release lookup says that the release was read and no file requested
-  (conventions §5). `meta.request` omits what the caller left `None`. The client keeps
-  upstream's answers in core's response cache for its default 300 s, every path (sdk-core
-  ADR-0061, decision 11), so a second call within that time sends nothing and its
-  `meta.retrieved_at` is when the first answer was stored. Every tool keeps the
-  default cap (200 rows or 64 KB); `MCP_CAPS` gives four tools a note of their own that
-  names their parameters for seeing the rest (sdk-core ADR-0038, conventions §8):
-  `list_publications` (next item), and the three the default can cut when called without
-  `page`, `list_releases` (its note names `since`, `until` and `page`),
-  `list_recent_releases` (about 0.46 KB a release, so after some 140 rows; its note names
-  `since`, `until` and `page`) and a broad `search_publications` (about 1.8 KB a
-  publication, so after some 36 matches; its note names `page`). The notes carry the cap,
-  so the task docstrings, which are the tool descriptions, never state it (sdk-core's
-  handover, "Adopting core 0.3.0",
+  (conventions §5). `meta.request` omits what the caller left `None`.
+- **The cache.** The client keeps upstream's answers in core's response cache for its
+  default 300 s, every path (sdk-core ADR-0061, decision 11), so a second call within that
+  time sends nothing and its `meta.retrieved_at` is when the first answer was stored; a
+  file that `download_release_file` streams is never kept. ESMIS's own answers allow a
+  cache an hour ("Answers carry ESMIS's own cache headers").
+- **The caps.** Every tool keeps the default cap (200 rows or 64 KB); `MCP_CAPS` gives
+  four tools a note of their own that names their parameters for seeing the rest
+  (sdk-core ADR-0038, conventions §8): `list_publications` (next item), and the three the
+  default can cut when called without `page`, `list_releases` (its note names `since`,
+  `until` and `page`), `list_recent_releases` (the same) and a broad `search_publications`
+  (its note names `page`), at the sizes the comment above `MCP_CAPS` measures. The notes
+  carry the cap, so the task docstrings, which are the tool descriptions, never state it
+  (sdk-core's handover, "Adopting core 0.3.0",
   https://github.com/xippios/sdk-core/blob/v0.4.1/docs/handover.md), and each description
   stays under 1,000 characters, stating the most requests a call spends (sdk-core
   ADR-0063, decision 9; ADR-0061, decision 8).
@@ -224,24 +220,23 @@ where it changes them.
   core's `tool_functions` and `router_from_tasks` (sdk-core ADR-0040): it streams one file
   with core's `download` to the path the caller names, `meta.endpoint` the file's name as
   upstream prints it (sdk-core ADR-0020, amendment 2026-11-18, point c); the file is never
-  cached. Its signature is `(release_id, format=None, dest=None, *, name=None)`, so the
-  positional `(release_id, format, dest)` that `xippios-usda-wasde` sends keeps working.
-  `dest` is required and checked before any request: `None` is `InvalidRequestError`, and
-  a directory or a path in a missing directory is refused by core's `check_dest`, the
-  check core's `download` makes, before the release lookup. The file is chosen by
-  `name` alone (the file of that name), `format` alone (the first of that format in
-  upstream order) or both (the named file, which must be of that format); neither is
-  refused before the lookup, an unknown name is `InvalidRequestError` naming the release's
-  files, and a name of another format one naming its format, each saying that the release
-  was read and no file requested. A release with an original and a revised file of one
-  format (95621, the WASDE of 2013-08-12, lists `ORIGwasde-08-12-2013.xml` before
-  `wasde-08-12-2013.xml`) is reached by `name` (decided in
-  https://github.com/xippios/sdk-usda-esmis/pull/10). A
-  release's files are `Release.release_files()`, `ReleaseFile.from_url` on each URL, in
-  upstream order: the reading a dependent calls rather than copies (sdk-core ADR-0021).
-  The download budget: one small file, the current WASDE `.txt` (about 120 KB), for the
-  fixture (`download_release_file/wasde1026_txt.json`, recorded whole) and for the nightly
-  live test, which writes it to a temporary directory.
+  cached. `dest` is keyword-only and required, as sdk-faostat's
+  `download_dataset(dataset_code, *, dest)` has it, so a call without it is Python's
+  `TypeError`, and core's `check_dest` refuses a directory or a path in a missing
+  directory before the release lookup. The file is chosen by `name` alone (the file of
+  that name), `format` alone (the first of that format in upstream order) or both (the
+  named file, which must be of that format); a call with neither is refused before the
+  lookup, an unknown name is `InvalidRequestError` naming the release's files, and a name
+  of another format one naming its format, each saying that the release was read and no
+  file requested. A release with an original and a revised file of one format (95621,
+  "A release lists one to six files") is reached by `name` (decided in
+  https://github.com/xippios/sdk-usda-esmis/pull/10). A release's files are
+  `Release.release_files()`, `ReleaseFile.from_url` on each URL, in upstream order: the
+  reading a dependent calls rather than copies (sdk-core ADR-0021); `get_release` answers
+  their URLs, and no task lists them beside it. The download budget: one small file, the
+  current WASDE `.txt` (about 120 KB), for the fixture
+  (`download_release_file/wasde1026_txt.json`, recorded whole) and for the nightly live
+  test, which writes it to a temporary directory.
 - **Core.** The package depends on `xippios-core` 0.5.0 from PyPI (`core_version`
   0.5.0, `~=0.5.0`; template v0.5.0), which carries `get_answer` and its `Answer`, the
   one reader of JSON (sdk-core ADR-0037), the walk `fetch_pages` (ADR-0034), the response
