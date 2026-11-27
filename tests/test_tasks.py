@@ -51,7 +51,6 @@ from xippios.core import (
     ResultCap,
     UnknownCode,
     UpstreamModel,
-    ValidationError,
     check_dest,
     fetch_pages,
 )
@@ -527,11 +526,13 @@ async def test_a_page_of_another_size_stops_the_walk(respx_mock: respx.MockRoute
     """NOT RECORDED: page 0 of ``publication_search`` for ``wasde`` as recorded on 2026-10-27,
     its pager's ``items_per_page`` changed in memory from 25 to 50, a form upstream was not
     seen to send (conventions §10, kind 4): the walk counts its offsets in pages of 25, so it
-    refuses rather than skip or repeat items, naming what it sent."""
+    refuses rather than skip or repeat items, naming what it sent. A refusal from an answer
+    that parses, which tells the caller to pass ``page``, is ``InvalidRequestError``
+    (conventions §5)."""
     body = recorded_body("publication_search", "wasde_page0")
     body["pager"]["items_per_page"] = 50
     route = respx_mock.get(f"{API}/publication/search").respond(json=body)
-    with pytest.raises(ValidationError) as caught:
+    with pytest.raises(InvalidRequestError) as caught:
         await tasks.search_publications_async("wasde")
     assert str(caught.value).startswith(
         "ESMIS answered page 0 of GET /api/v1/publication/search in pages of 50 items, where "
