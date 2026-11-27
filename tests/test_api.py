@@ -4,7 +4,9 @@ Each wrapper is called against its recorded answer and the model's shape is chec
 together with the wire's quirks that README lists (string ids, arrays where the OpenAPI
 document has strings, the list wrapper's extra keys, ``"pager": []``, the clamped page).
 What was sent is compared through ``sent_urls(route)``, the URLs with credentials
-redacted, never a request kept from ``route.calls``.
+redacted, never a request kept from ``route.calls``. Every wrapper returns core's
+``Answer``, its model the ``payload``, beside the time it was retrieved. Each answer a test
+builds says where it comes from and names its kind where it is built (conventions §10).
 """
 
 import importlib
@@ -19,8 +21,14 @@ from pathlib import Path
 import httpx
 import pydantic
 import pytest
-from xippios.core import InvalidRequestError, NotFoundError, parse
-from xippios.core.testing import ReplayFixture, load_fixture, response_from_fixture, sent_urls
+from xippios.core import Answer, InvalidRequestError, NotFoundError, parse
+from xippios.core.testing import (
+    ReplayFixture,
+    assert_time_between,
+    load_fixture,
+    response_from_fixture,
+    sent_urls,
+)
 
 from xippios.usda.esmis import api
 from xippios.usda.esmis._client import BASE_URL, SOURCE, classify
@@ -198,7 +206,12 @@ def test_wrapper_signatures_follow_the_document() -> None:
 
 async def test_agency_find_all(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("agency_find_all", "all")
-    agencies = await api.agency_find_all()
+    before = datetime.now(UTC)
+    answer = await api.agency_find_all()
+    after = datetime.now(UTC)
+    assert isinstance(answer, Answer), "core's Answer: the model and when it was retrieved"
+    assert_time_between(answer.retrieved_at, before, after)
+    agencies = answer.payload
     assert [a.id for a in agencies] == [str(n) for n in range(1, 10)], "ids are strings"
     assert [a.acronym for a in agencies] == [
         "FAS",
@@ -218,13 +231,13 @@ async def test_agency_find_all(replay_fixture: ReplayFixture) -> None:
 
 async def test_agency_find_by_acronym(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("agency_find_by_acronym", "waob")
-    assert await api.agency_find_by_acronym("WAOB") == [WAOB], "a bare array of one"
+    assert (await api.agency_find_by_acronym("WAOB")).payload == [WAOB], "a bare array of one"
     assert sent_urls(route) == [f"{API}/agency/findByAcronym/WAOB"]
 
 
 async def test_agency_find_by_id(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("agency_find_by_id", "3")
-    assert await api.agency_find_by_id(3) == [WAOB], "a bare array of one"
+    assert (await api.agency_find_by_id(3)).payload == [WAOB], "a bare array of one"
     assert sent_urls(route) == [f"{API}/agency/findById/3"]
 
 
@@ -232,7 +245,7 @@ async def test_publication_find_all(replay_fixture: ReplayFixture) -> None:
     """findAll's publications carry ``agency_acronym`` and no
     ``publication_agency_export_1``, every one of them, as recorded."""
     route = replay_fixture("publication_find_all", "page0")
-    page = await api.publication_find_all(page=0)
+    page = (await api.publication_find_all(page=0)).payload
     assert page.pager == Pager(
         current_page=0, items_per_page=25, total_pages=101, total_results=2522
     )
@@ -251,7 +264,7 @@ async def test_publication_find_all(replay_fixture: ReplayFixture) -> None:
 async def test_publication_find_all_past_the_last_page(replay_fixture: ReplayFixture) -> None:
     """Page 500 of 101 answers no results and ``current_page`` clamped to the last."""
     route = replay_fixture("publication_find_all", "page500")
-    page = await api.publication_find_all(page=500)
+    page = (await api.publication_find_all(page=500)).payload
     assert page.pager == Pager(
         current_page=100, items_per_page=25, total_pages=101, total_results=2522
     )
@@ -261,7 +274,7 @@ async def test_publication_find_all_past_the_last_page(replay_fixture: ReplayFix
 
 async def test_publication_find_by_agency(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("publication_find_by_agency", "waob_page0")
-    page = await api.publication_find_by_agency("WAOB", page=0)
+    page = (await api.publication_find_by_agency("WAOB", page=0)).payload
     assert page.pager == Pager(current_page=0, items_per_page=25, total_pages=1, total_results=2)
     assert [p.id for p in page.results] == ["1659", "1699"]
     assert {tuple(p.agency) for p in page.results} == {("World Agricultural Outlook Board",)}
@@ -272,7 +285,7 @@ async def test_publication_find_by_agency(replay_fixture: ReplayFixture) -> None
 
 async def test_publication_find_by_id(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("publication_find_by_id", "1659")
-    page = await api.publication_find_by_id(1659)
+    page = (await api.publication_find_by_id(1659)).payload
     assert page.pager == Pager(current_page=0, items_per_page=25, total_pages=1, total_results=1)
     [wasde] = page.results
     assert wasde.id == "1659"
@@ -310,7 +323,7 @@ async def test_publication_find_by_id(replay_fixture: ReplayFixture) -> None:
 async def test_publication_upcoming_releases(replay_fixture: ReplayFixture) -> None:
     """Upcoming release times print an Eastern offset, which the model keeps."""
     route = replay_fixture("publication_find_by_id", "1863")
-    [hatchery] = (await api.publication_find_by_id(1863)).results
+    [hatchery] = (await api.publication_find_by_id(1863)).payload.results
     assert hatchery.title == "Broiler Hatchery"
     raw = recorded_body("publication_find_by_id", "1863")
     printed = raw["results"][0]["upcoming_releases"]  # type: ignore[index]
@@ -415,20 +428,20 @@ async def test_an_unknown_id_is_not_found(
 
 async def test_an_unknown_acronym_answers_an_empty_array(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("agency_find_by_acronym", "unknown")
-    assert await api.agency_find_by_acronym("NOPE") == []
+    assert (await api.agency_find_by_acronym("NOPE")).payload == []
     assert sent_urls(route) == [f"{API}/agency/findByAcronym/NOPE"]
 
 
 async def test_an_unknown_acronym_has_no_publications(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("publication_find_by_agency", "unknown")
-    page = await api.publication_find_by_agency("NOPE", page=0)
+    page = (await api.publication_find_by_agency("NOPE", page=0)).payload
     assert (page.pager, page.results) == (EMPTY_PAGER, [])
     assert sent_urls(route) == [f"{API}/publication/findByAgency/NOPE?page=0"]
 
 
 async def test_an_unknown_identifier_has_no_releases(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("release_find_by_identifier", "unknown")
-    page = await api.release_find_by_identifier("nope-nope", page=0)
+    page = (await api.release_find_by_identifier("nope-nope", page=0)).payload
     assert (page.pager, page.results) == (EMPTY_PAGER, [])
     assert sent_urls(route) == [f"{API}/release/findByIdentifier/nope-nope?page=0"]
 
@@ -450,15 +463,19 @@ def test_classify_leaves_the_rest_to_core() -> None:
     ):
         fixture = load_fixture(FIXTURES / endpoint / f"{case}.json")
         assert classify(response_from_fixture(fixture)) is None
+    # NOT RECORDED: a 404 outside /api/v1/ without a body, of no shape upstream sends, to
+    # show that classify leaves it to core (conventions §10, kind 5).
     outside = httpx.Response(404, request=httpx.Request("GET", f"{BASE_URL}/api"))
     assert classify(outside) is None
+    # NOT RECORDED: a 500 without a body, of no shape upstream sends, to show that classify
+    # leaves it to core (conventions §10, kind 5).
     server_error = httpx.Response(500, request=httpx.Request("GET", f"{API}/release/findAll"))
     assert classify(server_error) is None
 
 
 async def test_publication_find_by_identifier(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("publication_find_by_identifier", "wasde")
-    page = await api.publication_find_by_identifier("wasde")
+    page = (await api.publication_find_by_identifier("wasde")).payload
     by_id = parse(
         PublicationResults,
         recorded_body("publication_find_by_id", "1659"),
@@ -473,7 +490,7 @@ async def test_publication_find_by_identifier(replay_fixture: ReplayFixture) -> 
 async def test_publication_find_by_identifier_unknown(replay_fixture: ReplayFixture) -> None:
     """An unknown identifier answers HTTP 200 with nothing: returned as such."""
     route = replay_fixture("publication_find_by_identifier", "unknown")
-    page = await api.publication_find_by_identifier("xippios-no-such-identifier")
+    page = (await api.publication_find_by_identifier("xippios-no-such-identifier")).payload
     assert page.pager == Pager(current_page=0, items_per_page=25, total_pages=0, total_results=0)
     assert page.results == []
     assert sent_urls(route) == [f"{API}/publication/findByIdentifier/xippios-no-such-identifier"]
@@ -509,9 +526,13 @@ def test_classify_keys_the_slash_refusal_on_both_sides() -> None:
     refused = response_from_fixture(fixture)
     assert isinstance(classify(refused), InvalidRequestError)
     acronym = httpx.Request("GET", f"{API}/agency/findByAcronym/AMS%2FDA")
+    # NOT RECORDED: the catalog's recorded 404 body of an unknown id, {"message": ""}, for a
+    # path with %2F, which upstream was not seen to send (conventions §10, kind 4).
     json_404 = httpx.Response(404, json={"message": ""}, request=acronym)
     assert type(classify(json_404)) is NotFoundError
     plain = httpx.Request("GET", f"{API}/publication/findByIdentifier/FDS")
+    # NOT RECORDED: the recorded HTML 404 of with_slash.json for a path without %2F, a form
+    # upstream was not seen to send (conventions §10, kind 4).
     html_404 = httpx.Response(
         404,
         headers={"content-type": "text/html; charset=iso-8859-1"},
@@ -519,6 +540,8 @@ def test_classify_keys_the_slash_refusal_on_both_sides() -> None:
         request=plain,
     )
     assert type(classify(html_404)) is NotFoundError
+    # NOT RECORDED: the recorded HTML 404 of with_slash.json for another path with %2F, which
+    # ESMIS's web server answers alike for every encoded slash (conventions §10, kind 3).
     refused_acronym = httpx.Response(
         404,
         headers={"content-type": "text/html; charset=iso-8859-1"},
@@ -532,7 +555,7 @@ def test_classify_keys_the_slash_refusal_on_both_sides() -> None:
 
 async def test_publication_search(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("publication_search", "wasde_page0")
-    page = await api.publication_search("wasde", page=0)
+    page = (await api.publication_search("wasde", page=0)).payload
     assert page.pager == Pager(current_page=0, items_per_page=25, total_pages=1, total_results=7)
     assert [p.id for p in page.results] == ["1762", "1831", "1154", "1830", "1763", "1646", "1659"]
     feed = page.results[0]
@@ -555,7 +578,7 @@ async def test_publication_search_empty_query(replay_fixture: ReplayFixture) -> 
         "sorters": [],
         "system": {"page_key": "page"},
     }
-    page = await api.publication_search("", page=0)
+    page = (await api.publication_search("", page=0)).payload
     assert page.pager == ()
     assert page.results == []
     assert page.model_dump(mode="json") == {"pager": [], "results": []}
@@ -573,6 +596,7 @@ def test_publication_search_without_query_answers_alike() -> None:
 
 
 def test_pager_refuses_a_non_empty_list() -> None:
+    """A pager of ``[0]`` is an input of the test, not an answer from ESMIS."""
     with pytest.raises(pydantic.ValidationError):
         PublicationResults.model_validate({"pager": [0], "results": []})
 
@@ -580,7 +604,7 @@ def test_pager_refuses_a_non_empty_list() -> None:
 async def test_release_find_all(replay_fixture: ReplayFixture) -> None:
     """The highest ids first; release times are not in order across publications."""
     route = replay_fixture("release_find_all", "page0")
-    page = await api.release_find_all(page=0)
+    page = (await api.release_find_all(page=0)).payload
     assert page.pager == Pager(
         current_page=0, items_per_page=25, total_pages=61681, total_results=1542025
     )
@@ -599,7 +623,7 @@ async def test_release_find_all(replay_fixture: ReplayFixture) -> None:
 
 async def test_release_find_by_id(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("release_find_by_id", "796099")
-    page = await api.release_find_by_id(796099)
+    page = (await api.release_find_by_id(796099)).payload
     assert page.pager == Pager(current_page=0, items_per_page=25, total_pages=1, total_results=1)
     assert page.results == [WASDE_RELEASE]
     [raw] = recorded_body("release_find_by_id", "796099")["results"]  # type: ignore[index]
@@ -610,7 +634,7 @@ async def test_release_find_by_id(replay_fixture: ReplayFixture) -> None:
 async def test_release_find_by_identifier(replay_fixture: ReplayFixture) -> None:
     """A publication's releases come with the latest release time first."""
     route = replay_fixture("release_find_by_identifier", "wasde_page0")
-    page = await api.release_find_by_identifier("wasde", page=0)
+    page = (await api.release_find_by_identifier("wasde", page=0)).payload
     assert page.pager == Pager(current_page=0, items_per_page=25, total_pages=29, total_results=703)
     assert page.results[0] == WASDE_RELEASE
     times = [r.release_datetime for r in page.results]
@@ -622,7 +646,7 @@ async def test_release_find_by_identifier(replay_fixture: ReplayFixture) -> None
 
 async def test_release_find_by_pub_id(replay_fixture: ReplayFixture) -> None:
     route = replay_fixture("release_find_by_pub_id", "1659_page0")
-    page = await api.release_find_by_pub_id(1659, page=0)
+    page = (await api.release_find_by_pub_id(1659, page=0)).payload
     by_identifier = parse(
         ReleaseResults,
         recorded_body("release_find_by_identifier", "wasde_page0"),

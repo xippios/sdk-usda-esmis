@@ -6,9 +6,9 @@ JSON array of ``Agency``. Recorded: ``tests/fixtures/agency_find_all/all.json`` 
 agencies). Error answers are mapped once in ``xippios.usda.esmis._client.classify``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import Agency
 
 __all__ = ["agency_find_all"]
@@ -16,12 +16,11 @@ __all__ = ["agency_find_all"]
 OPERATION = "esmis_api_agency_findAll"
 
 
-async def agency_find_all() -> list[Agency]:
+async def agency_find_all() -> Answer[list[Agency]]:
     """Call ``esmis_api_agency_findAll``.
 
     Returns:
-        Every agency, in upstream order, e.g. ``Agency(id="3", title="World Agricultural
-        Outlook Board", acronym="WAOB", ...)``.
+        The ``Answer``, when it was retrieved and, as its payload, every agency, in upstream order,
+        e.g. ``Agency(id="3", title="World Agricultural Outlook Board", acronym="WAOB", ...)``.
     """
-    raw = await client.get_json("/api/v1/agency/findAll")
-    return parse(list[Agency], raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer("/api/v1/agency/findAll", parse=list[Agency], endpoint=OPERATION)

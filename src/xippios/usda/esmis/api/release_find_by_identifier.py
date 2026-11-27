@@ -20,9 +20,9 @@ here. The same web server answers both paths, so ``_client.classify`` would rais
 
 from urllib.parse import quote
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import ReleaseResults
 
 __all__ = ["release_find_by_identifier"]
@@ -30,7 +30,9 @@ __all__ = ["release_find_by_identifier"]
 OPERATION = "esmis_api_release_findByIdentifier"
 
 
-async def release_find_by_identifier(publication_identifier: str, page: int = 0) -> ReleaseResults:
+async def release_find_by_identifier(
+    publication_identifier: str, page: int = 0
+) -> Answer[ReleaseResults]:
     """Call ``esmis_api_release_findByIdentifier``.
 
     Args:
@@ -39,12 +41,14 @@ async def release_find_by_identifier(publication_identifier: str, page: int = 0)
         page: ``page``, 0-based, upstream's default ``0``, e.g. ``0``.
 
     Returns:
-        The page's ``pager`` and its releases.
+        The ``Answer``, when it was retrieved and, as its payload, the page's ``pager`` and its
+        releases.
 
     Raises:
         InvalidRequestError: The identifier carries ``/``, which ESMIS refuses, as recorded
             for the publication lookup by identifier.
     """
     path = f"/api/v1/release/findByIdentifier/{quote(publication_identifier, safe='')}"
-    raw = await client.get_json(path, params={"page": page})
-    return parse(ReleaseResults, raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer(
+        path, params={"page": page}, parse=ReleaseResults, endpoint=OPERATION
+    )

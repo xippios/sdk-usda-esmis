@@ -11,9 +11,9 @@ paged as ``esmis_api_publication_findAll`` is. Recorded:
 ``PublicationResults.pager`` takes it as ``()``.
 """
 
-from xippios.core import parse
+from xippios.core import Answer
 
-from xippios.usda.esmis._client import SOURCE, client
+from xippios.usda.esmis._client import client
 from xippios.usda.esmis.models import PublicationResults
 
 __all__ = ["publication_search"]
@@ -21,7 +21,7 @@ __all__ = ["publication_search"]
 OPERATION = "esmis_api_publication_search"
 
 
-async def publication_search(query: str, page: int = 0) -> PublicationResults:
+async def publication_search(query: str, page: int = 0) -> Answer[PublicationResults]:
     """Call ``esmis_api_publication_search``.
 
     Args:
@@ -29,9 +29,10 @@ async def publication_search(query: str, page: int = 0) -> PublicationResults:
         page: ``page``, 0-based, upstream's default ``0``, e.g. ``0``.
 
     Returns:
-        The page's ``pager`` and its publications; ``pager`` is ``()`` when ``query`` is
-        empty.
+        The ``Answer``, when it was retrieved and, as its payload, the page's ``pager`` and its
+        publications; ``pager`` is ``()`` when ``query`` is empty.
     """
     params = {"query": query, "page": page}
-    raw = await client.get_json("/api/v1/publication/search", params=params)
-    return parse(PublicationResults, raw, source=SOURCE, endpoint=OPERATION)
+    return await client.get_answer(
+        "/api/v1/publication/search", params=params, parse=PublicationResults, endpoint=OPERATION
+    )

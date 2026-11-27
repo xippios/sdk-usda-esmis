@@ -22,6 +22,12 @@ the rows of the packaged publication table that ``list_publications`` answers fr
 in upstream order: the reading the file tasks use, which the packages that depend on
 this one call rather than copy (sdk-core ADR-0021).
 
+The agency acronyms that a release and a publication carry, ``agency_acronym`` and
+``publication_agency_export_1``, are marked by ``NamedBy`` with the packaged agency list,
+``params.AGENCIES``, so every answer that holds one names its agencies by their titles in
+``meta.names``, and an acronym the packaged list lacks is left out of the names and said in
+``meta.notes`` (conventions §4; sdk-core ADR-0067, decision 6).
+
 Every model keeps ``UpstreamModel``'s ``extra="ignore"``: a key upstream sends that a
 model does not name is dropped when parsed, never refused. That is how
 ``PublicationResults`` and ``ReleaseResults`` take the list wrapper's ``filters``,
@@ -37,11 +43,13 @@ which the document does not list.
 """
 
 from enum import StrEnum
-from typing import Self
+from typing import Annotated, Self
 from urllib.parse import urlsplit
 
 from pydantic import AwareDatetime
-from xippios.core import UpstreamModel
+from xippios.core import NamedBy, UpstreamModel
+
+from xippios.usda.esmis.params import AGENCIES
 
 __all__ = [
     "Agency",
@@ -223,8 +231,8 @@ class Publication(UpstreamModel):
     description: str
     identifier: list[str]
     upcoming_releases: list[AwareDatetime]
-    agency_acronym: list[str] | None = None
-    publication_agency_export_1: list[str] | None = None
+    agency_acronym: Annotated[list[str] | None, NamedBy(AGENCIES)] = None
+    publication_agency_export_1: Annotated[list[str] | None, NamedBy(AGENCIES)] = None
 
 
 class PublicationRow(UpstreamModel):
@@ -242,7 +250,7 @@ class PublicationRow(UpstreamModel):
     Attributes:
         id: ``id``, a string of digits, e.g. ``"1659"``.
         identifier: ``identifier``, one or more, e.g. ``["wasde"]``; what
-            ``get_publication``, ``list_releases`` and ``get_latest_release`` take.
+            ``get_publication`` and ``list_releases`` take.
         title: ``title``, e.g. ``"World Agricultural Supply and Demand Estimates"``.
         agency_acronym: ``agency_acronym``, e.g. ``["WAOB"]``, ``["AMS", "AMS-DA"]``;
             ``None`` where upstream leaves it out.
@@ -257,8 +265,8 @@ class PublicationRow(UpstreamModel):
     id: str
     identifier: list[str]
     title: str
-    agency_acronym: list[str] | None
-    publication_agency_export_1: list[str] | None
+    agency_acronym: Annotated[list[str] | None, NamedBy(AGENCIES)]
+    publication_agency_export_1: Annotated[list[str] | None, NamedBy(AGENCIES)]
     frequency: str
     status: Status
     resource_type: ResourceType
@@ -304,7 +312,7 @@ class Release(UpstreamModel):
     title: str
     release_datetime: AwareDatetime
     identifier: list[str]
-    agency_acronym: str
+    agency_acronym: Annotated[str, NamedBy(AGENCIES)]
     bibliographic_citation: str
     description: str
     equipment_software: str
