@@ -39,9 +39,10 @@ What every task follows:
   core's ``fetch_pages`` walks them from page 0 under one bound, ``WALK_PAGES``, for
   Python and MCP alike, and refuses a walk that needs more pages, after its first request
   where upstream's count shows it (sdk-core ADR-0034, amendment 2026-11-24). The two release
-  lists stop by ``since``; ``list_recent_releases`` walks only from a ``since`` on or after
-  ``CATALOG_ORDER_SINCE``, under its own stop rule (``_newest_before``), and refuses an
-  older ``since`` before any request.
+  lists stop after the first page whose newest release is dated before ``since``
+  (``_newest_before``), ``list_recent_releases`` more than ``ORDER_TOLERANCE`` before it;
+  ``list_recent_releases`` walks only from a ``since`` on or after ``CATALOG_ORDER_SINCE``
+  and refuses an older ``since`` before any request.
 - A refusal before the first request says that nothing was sent, and one after a request
   says what was sent (conventions §5; sdk-core ADR-0045, amendment 2026-11-24).
 - Release times: ``meta.vintage`` is the release id as printed (``"796099"``). The two
@@ -204,8 +205,8 @@ date, the first WASDE release of the new ids, so every release catalogued in the
 is taken to be dated on or before it, as WASDE's are (the newest, 96169, is dated
 2025-08-12). A walk from an older ``since`` would reach the imported ids, where a page of
 older-dated releases can sit above a newer one and end the walk early without a sign; so
-such a ``since`` is refused, and ``list_releases`` (one publication, in release order)
-or ``page`` serves the older dates (decided in
+such a ``since`` is refused, and ``list_releases`` (one publication's list, whose walk
+ends by that list's own order) or ``page`` serves the older dates (decided in
 https://github.com/xippios/sdk-usda-esmis/pull/11). Read from the WASDE recordings, not
 probed for other publications. The catalog is denser toward the bound: WASDE's new ids
 run 791996 (2025-09-12) to 795643 (2025-11-14), 3,647 ids in two months, against 456
@@ -320,33 +321,26 @@ def _between(releases: Sequence[Release], since: date | None, until: date | None
     ]
 
 
-def _newest_before(since: date) -> Callable[[Sequence[Release]], bool]:
-    """The stop rule of ``list_recent_releases``'s walk from page 0, for a ``since``.
+def _newest_before(bound: date) -> Callable[[Sequence[Release]], bool]:
+    """The stop rule of both release walks: a page whose newest release is dated before ``bound``.
 
-    A page ends the walk when its newest release is dated more than ``ORDER_TOLERANCE``
-    before ``since``, on the printed date of ``release_datetime``, never converted.
-    ``esmis_api_release_findAll`` lists the latest catalogued first, and release dates only
-    mostly follow it, so a page's oldest date says little (page 0 of 2026-10-27 ends with
-    a release dated 2026-09-28 after 24 dated 2026-10-09 or later); its newest says where
-    the walk is. An empty page is no stop: the walk ends there anyway.
+    On the printed date of ``release_datetime``, never converted. ``list_releases`` passes
+    ``since``, ``list_recent_releases`` ``since - ORDER_TOLERANCE``. A page's oldest date
+    says little in either list: ``esmis_api_release_findAll`` lists the latest catalogued
+    first with dates only mostly in that order (page 0 of 2026-10-27 ends with a release
+    dated 2026-09-28 after 24 dated 2026-10-09 or later), and a publication's list holds
+    older releases out of place on early pages (WASDE's page 3 of 2026-11-27 lists 95866 of
+    1995-01-31 among releases of 2019). Its newest says where the walk is: on WASDE's whole
+    list no page holds a release dated after the newest of a page before it, so past the
+    page that ends a walk of ``list_releases`` no page holds a release from ``since`` on
+    (``docs/upstream/OBSERVED.md``, "A publication's releases come newest first page by
+    page"), and a release filed on a later page with a later date would break that;
+    ``ORDER_TOLERANCE`` says what findAll's recorded pages hold. An empty page is no stop:
+    the walk ends there anyway.
     """
-    bound = since - ORDER_TOLERANCE
 
     def last(items: Sequence[Release]) -> bool:
         return bool(items) and max(item.release_datetime.date() for item in items) < bound
-
-    return last
-
-
-def _oldest_before(since: date) -> Callable[[Sequence[Release]], bool]:
-    """The stop rule of ``list_releases``'s walk: a page whose oldest release is before ``since``.
-
-    A publication lists its releases latest ``release_datetime`` first, so the page that
-    reaches back before ``since`` is the last one that holds a release from ``since`` on.
-    """
-
-    def last(items: Sequence[Release]) -> bool:
-        return bool(items) and min(item.release_datetime.date() for item in items) < since
 
     return last
 
@@ -593,26 +587,29 @@ async def list_releases_async(
     until: date | None = None,
     page: int | None = None,
 ) -> Result[list[Release]]:
-    """A publication's releases, newest first, each with its release time and file links.
+    """A publication's releases in ESMIS's order, each with its release time and file links.
 
-    ``esmis_api_release_findByIdentifier``, one request per page of 25. ESMIS lists a
-    publication's releases newest first by ``release_datetime``, an order observed, not
-    documented: the first row of ``page=0`` is the latest release. ``page`` given returns
-    that page; omitted, the pages are walked from page 0, at most 24 requests, 96 attempts
-    with the client's retries. With ``since`` the walk stops after the first page whose
-    oldest release is dated before it; without it a publication of more than 24 pages,
-    WASDE's 29 among them, is refused after its first request, naming ``page``. ``since``
-    and ``until`` keep the releases whose printed date lies between them, both included,
-    filtered by the package after the fetch. An identifier ESMIS does not know gives the
-    empty list with ``meta.total`` 0 and a note that says so. ``meta.total`` is upstream's
-    count of the publication's releases before the date filter.
+    ``esmis_api_release_findByIdentifier``, one request per page of 25. ESMIS lists them
+    newest first page by page, observed, not documented: row 0 of ``page=0`` is the latest
+    release, and no page lists one dated after the newest of an earlier page, though older
+    ones can sit out of place. ``page`` given returns that page; omitted, the pages are
+    walked from page 0, at most 24 requests, 96 attempts with the client's retries. With
+    ``since`` the walk stops after the first page whose newest release is dated before it;
+    without it a publication of more than 24 pages, WASDE's 29 among them, is refused after
+    its first request, naming ``page``. ``since`` and ``until`` keep the releases whose
+    printed date lies between them, both included. An identifier ESMIS does not know gives
+    the empty list with ``meta.total`` 0 and a note that says so. ``meta.total`` is
+    upstream's count before the date filter.
 
     Args:
         publication_identifier: One of a publication's ``identifier`` values, e.g.
             ``"wasde"``, ``"CropProg"``; pass one without ``/``, which every publication
             but publication 654 has.
         since: The earliest release date to keep, e.g. ``2026-01-01`` (a date); without
-            ``page`` the walk stops by it. ``None`` (the default) keeps every one.
+            ``page`` the walk reads one page past the last release it keeps, and a walk
+            that 24 pages do not end is refused after them, naming ``page``, as WASDE's
+            list of 2026-11-27 has it for a ``since`` before 1982-02-12. ``None`` (the
+            default) keeps every one.
         until: The latest release date to keep, e.g. ``2026-06-30`` (a date); ``None``
             (the default) keeps every one.
         page: A 0-based page of 25, e.g. ``0`` for the newest releases; ``None`` (the
@@ -644,7 +641,7 @@ async def list_releases_async(
             page_size=PAGE_SIZE,
             most=WALK_PAGES,
             paging="page",
-            stop=None if since is None else _oldest_before(since),
+            stop=None if since is None else _newest_before(since),
             key=_release_id,
             source=SOURCE,
         )
@@ -688,9 +685,9 @@ async def list_recent_releases_async(
             f"since ({since}) is before {CATALOG_ORDER_SINCE}: ESMIS's catalog lists releases "
             f"in an order that follows their release dates only since {CATALOG_ORDER_SINCE}, "
             f"so a walk from an older since could stop early. {NOTHING_SENT} Use list_releases "
-            "(over MCP, the tool usda_esmis_list_releases) for one publication's releases in "
-            "release order, pass page to read older pages of the catalog, or pass a since on "
-            f"or after {CATALOG_ORDER_SINCE}.",
+            "(over MCP, the tool usda_esmis_list_releases) for one publication's older "
+            "releases, pass page to read older pages of the catalog, or pass a since on or "
+            f"after {CATALOG_ORDER_SINCE}.",
             source=SOURCE,
         )
     request = {"since": since, "until": until, "page": page}
@@ -702,7 +699,7 @@ async def list_recent_releases_async(
         return Result(data=_between(answer.payload.results, since, until), meta=meta)
     retrieved: list[datetime] = []
     ended: list[int] = []
-    rule = None if since is None else _newest_before(since)
+    rule = None if since is None else _newest_before(since - ORDER_TOLERANCE)
 
     async def fetch(offset: int) -> _Page[Release]:
         number = offset // PAGE_SIZE
