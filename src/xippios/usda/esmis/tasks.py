@@ -596,7 +596,8 @@ async def list_releases_async(
         since: The earliest release date to keep, e.g. ``2026-01-01`` (a date); without
             ``page`` the walk reads one page past the last release it keeps, and a walk
             that 24 pages do not end is refused after them, naming ``page``, as WASDE's is
-            for a ``since`` before 1982-02-12. ``None`` (the default) keeps every one.
+            for a ``since`` before 1982-02-12 (ESMIS's note "A publication's releases come
+            newest first page by page"). ``None`` (the default) keeps every one.
         until: The latest release date to keep, e.g. ``2026-06-30`` (a date); ``None``
             (the default) keeps every one.
         page: A 0-based page of 25, e.g. ``0`` for the newest releases; ``None`` (the
