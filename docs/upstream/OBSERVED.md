@@ -145,8 +145,11 @@ pager counts rows. The packaged table lists 94 identifiers that two publications
 
 Probe: 2026-11-26, `esmis_api_publication_findByIdentifier` and
 `esmis_api_release_findByIdentifier`, page 0, for `AMS_1045`, one request each and
-without a key; no sample is recorded, since the adoption adds no fixture, and the
-packaged table's rows of publications 1443 and 2064 list the identifier.
+without a key, which kept no answer; on 2026-11-27 the same two requests once more, which
+answered as on the day before; samples
+`publication_find_by_identifier/AMS_1045_2026_11_27.json` and
+`release_find_by_identifier/AMS_1045_2026_11_27_page0.json`, and the packaged table's rows
+of publications 1443 and 2064, which list the identifier.
 
 ## Paging and order
 
@@ -236,12 +239,11 @@ ran in date order.
 
 Probe: 2026-11-27, `esmis_api_release_findByIdentifier` for `wasde`, pages 0 to 28 between
 06:17 and 06:19 UTC and pages 3 and 4 once before them at 05:56 UTC, 31 requests without a
-key; samples `release_find_by_identifier/wasde_2026_11_27_page0.json` to
-`release_find_by_identifier/wasde_2026_11_27_page7.json`, the pages a walk from 2015-10-01
-reads, pages 8 to 28 not recorded. The probe kept each answer's body and no header, so
-these eight samples hold the status, 200, and the body alone. On 2026-10-27, pages 0 and 1;
-samples
-`release_find_by_identifier/wasde_page0.json` and
+key, which kept no answer whole; pages 0 to 7, the pages a walk from 2015-10-01 reads,
+recorded at 14:07 UTC that day, one request each, each body as the probe had read it;
+samples `release_find_by_identifier/wasde_2026_11_27_page0.json` to
+`release_find_by_identifier/wasde_2026_11_27_page7.json`, pages 8 to 28 not recorded. On
+2026-10-27, pages 0 and 1; samples `release_find_by_identifier/wasde_page0.json` and
 `release_find_by_identifier/wasde_page1.json`.
 
 ### Publication lists follow no id order
