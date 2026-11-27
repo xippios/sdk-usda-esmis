@@ -348,7 +348,9 @@ def yaml_enums() -> dict[tuple[str, str], list[str]]:
     Read line by line, so that the document's unquoted ``Yes`` and ``No``, which a YAML 1.1
     reader takes for booleans, stay the text that the wire sends. A schema is a line of four
     spaces under ``schemas:``, a property one of eight, and an ``enum:`` of ten spaces opens
-    the list of its property; an ``enum`` in any other form fails the count of the test.
+    the list of its property. An ``enum`` in any other form, on an array's ``items`` or
+    written inline as ``enum: [a, b]``, opens no list here and fails the test's count of the
+    document's ``enum`` keys.
     """
     found: dict[tuple[str, str], list[str]] = {}
     schema = prop = ""
@@ -388,6 +390,8 @@ def test_the_enumerations_written_by_hand_follow_the_document() -> None:
     why a field stays ``str``.
     """
     enums = yaml_enums()
+    keys = re.findall(r"\benum\b[\"']?\s*:", SNAPSHOT.read_text(encoding="utf-8"))
+    assert len(keys) == len(enums), "an enum on an array's items or in flow form is unread"
     assert sorted(enums) == sorted(("Publication", field) for field in ENUMERATIONS)
     for field, enum in ENUMERATIONS.items():
         documented = enums["Publication", field]
