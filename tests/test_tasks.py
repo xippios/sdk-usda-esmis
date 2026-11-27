@@ -30,6 +30,7 @@ import importlib
 import inspect
 import json
 import re
+from collections import Counter
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from importlib import resources
@@ -625,15 +626,19 @@ def test_list_releases_answers_a_page_of_a_shared_identifier_as_esmis_lists_it(
 ) -> None:
     """A page given is answered as upstream sends it (decision 6 of
     https://github.com/xippios/sdk-usda-esmis/pull/66): for ``AMS_1045`` the releases of both
-    its publications, each once for each agency acronym of its publication, so the page's 25
-    rows hold 13 releases (``docs/upstream/OBSERVED.md``, "An identifier that two
-    publications share answers both")."""
+    its publications, a release listed once for each agency acronym of its publication, so
+    the page's 25 rows hold twelve releases twice and the last, 420688, once
+    (``docs/upstream/OBSERVED.md``, "An identifier that two publications share answers
+    both")."""
     case = f"{SHARED}_page0"
     route = replay_fixture("release_find_by_identifier", case, match_params=["page"])
     result = tasks.list_releases("AMS_1045", page=0)
     assert result.data == releases_of(case)
     assert len(result.data) == 25
-    assert len({release.id for release in result.data}) == 13
+    rows = Counter(release.id for release in result.data)
+    assert sorted(rows.values()) == [1] + [2] * 12, "twelve releases twice, one once"
+    assert [id_ for id_, count in rows.items() if count == 1] == ["420688"]
+    assert result.data[-1].id == "420688", "in the page's last row"
     assert [(release.id, release.agency_acronym) for release in result.data[:2]] == [
         ("794730", "AMS"),
         ("794730", "AMS-DA"),
