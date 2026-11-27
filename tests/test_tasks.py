@@ -1409,11 +1409,26 @@ def test_download_release_file(
     assert result.meta.vintage == "796099"
     assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
     assert result.meta.request == {"release_id": 796099, **chosen_by, "url": WASDE_TXT}
-    assert result.meta.retrieved_at == result.data.retrieved_at
+    assert result.meta.retrieved_at <= result.data.retrieved_at, "the older of the two times"
     assert_time_between(result.meta.retrieved_at, before, after)
     assert sent_urls(release) == [f"{API}/release/findById/796099"]
     assert sent_urls(file) == [WASDE_TXT]
     assert [path.name for path in tmp_path.iterdir()] == ["wasde1026.txt"], "no part file"
+
+
+def test_a_download_dates_its_answer_by_the_older_release_lookup(
+    replay_fixture: ReplayFixture, tmp_path: Path
+) -> None:
+    """A task that assembles several answers gives the oldest of their times (conventions
+    §4): read within the cache's 300 s, the release lookup is the stored answer, whose time is
+    before the file's (https://github.com/xippios/sdk-usda-esmis/issues/73)."""
+    release = replay_fixture("release_find_by_id", "796099")
+    replay_fixture("download_release_file", "wasde1026_txt")
+    read = tasks.get_release(796099)
+    result = tasks.download_release_file(796099, dest=tmp_path / "wasde1026.txt", format="txt")
+    assert result.meta.retrieved_at == read.meta.retrieved_at, "when the lookup was stored"
+    assert result.meta.retrieved_at < result.data.retrieved_at, "before the file was complete"
+    assert sent_urls(release) == [f"{API}/release/findById/796099"], "one lookup, then the cache"
 
 
 def test_download_release_file_refuses_a_format_the_release_lacks(
