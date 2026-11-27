@@ -15,13 +15,15 @@ exchange the download replays, and, on 2026-10-28, the WASDE of 2013-08-12
 (``release_find_by_id/95621.json``), whose original and revised files of one format the
 download's choice by ``format`` and ``name`` is tested on, without a download, and page 1
 of every release (``release_find_all/page1.json``), which the walk of
-``list_recent_releases`` crosses into. WASDE's release pages 0 to 7 of 2026-11-27
-(``release_find_by_identifier/wasde_2026_11_27_page0.json`` to ``_page7.json``), read once
-each by a probe of the whole list, which kept each answer's body and no header, and written
-by core's writer with the status and the body alone, are the pages the walks of
-``list_releases`` from ``since`` cross, the two that hold older releases out of place among
-them. The download is checked by path, size and content type, never by what
-the file says (sdk-core ADR-0020).
+``list_recent_releases`` crosses into. WASDE's release pages 0 to 7 recorded on 2026-11-27
+(``release_find_by_identifier/wasde_2026_11_27_page0.json`` to ``_page7.json``) are the
+pages the walks of ``list_releases`` from ``since`` cross, the two that hold older releases
+out of place among them, and the two answers recorded that day for ``AMS_1045``, an
+identifier that two publications share
+(``publication_find_by_identifier/AMS_1045_2026_11_27.json`` and
+``release_find_by_identifier/AMS_1045_2026_11_27_page0.json``), are what ``get_publication``
+refuses and what ``list_releases`` answers for it. The download is checked by path, size and
+content type, never by what the file says (sdk-core ADR-0020).
 """
 
 import importlib
@@ -128,7 +130,10 @@ def releases_of(case: str) -> list[Release]:
 
 
 NOVEMBER = [f"wasde_2026_11_27_page{page}" for page in range(8)]
-"""WASDE's release pages 0 to 7 as ESMIS served them on 2026-11-27, of 704 releases on 29."""
+"""WASDE's release pages 0 to 7, recorded on 2026-11-27, of 704 releases on 29 pages."""
+SHARED = "AMS_1045_2026_11_27"
+"""The answers recorded on 2026-11-27 for ``AMS_1045``, an identifier of publications 1443 and
+2064: the publication lookup, and page 0 of the release list, ``SHARED + "_page0"``."""
 
 
 def recent_of(case: str) -> list[Release]:
@@ -549,27 +554,22 @@ def test_get_publication(replay_fixture: ReplayFixture) -> None:
 
 
 def test_get_publication_refuses_an_identifier_that_two_publications_share(
-    respx_mock: respx.MockRouter,
+    replay_fixture: ReplayFixture,
 ) -> None:
-    """NOT RECORDED: the recorded answer of ``publication_find_by_identifier/wasde.json`` with
-    a second recorded publication, 1762 of ``publication_search/wasde_page0.json``, appended to
-    its results and its pager counting 2, the form that the probe of ``AMS_1045`` saw and no
-    fixture holds (conventions §10, kind 4)."""
-    body = recorded_body("publication_find_by_identifier", "wasde")
-    second = recorded_body("publication_search", "wasde_page0")["results"][0]
-    assert second["id"] == "1762"
-    body["results"].append(second)
-    body["pager"]["total_results"] = 2
-    route = respx_mock.get(f"{API}/publication/findByIdentifier/wasde").respond(json=body)
+    """ESMIS answers ``AMS_1045`` with publications 1443 and 2064, its pager counting 2
+    (``docs/upstream/OBSERVED.md``, "An identifier that two publications share answers both")."""
+    route = replay_fixture("publication_find_by_identifier", SHARED)
+    publications = recorded(PublicationResults, "publication_find_by_identifier", SHARED)
+    assert [publication.id for publication in publications.results] == ["1443", "2064"]
     with pytest.raises(InvalidRequestError) as caught:
-        tasks.get_publication("wasde")
+        tasks.get_publication("AMS_1045")
     assert str(caught.value) == (
-        "ESMIS answered GET /api/v1/publication/findByIdentifier/wasde with 2 publications, "
-        "1659 and 1762, so the identifier names no one publication and none is returned; "
+        "ESMIS answered GET /api/v1/publication/findByIdentifier/AMS_1045 with 2 publications, "
+        "1443 and 2064, so the identifier names no one publication and none is returned; "
         f"{SEARCH_BY_KEYWORD}, and its answer holds each publication whole."
     )
     assert caught.value.source == SOURCE
-    assert sent_urls(route) == [f"{API}/publication/findByIdentifier/wasde"]
+    assert sent_urls(route) == [f"{API}/publication/findByIdentifier/AMS_1045"]
 
 
 def test_get_publication_unknown_is_not_found(replay_fixture: ReplayFixture) -> None:
@@ -610,6 +610,34 @@ def test_list_releases_one_page(replay_fixture: ReplayFixture) -> None:
     assert result.meta.total == 703, "upstream's count for the whole publication"
     assert (result.meta.vintage, result.meta.published_at) == (None, None)
     assert sent_urls(route) == [f"{WASDE_RELEASES}?page=0"]
+
+
+def test_list_releases_answers_a_page_of_a_shared_identifier_as_esmis_lists_it(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """A page given is answered as upstream sends it (decision 6 of
+    https://github.com/xippios/sdk-usda-esmis/pull/66): for ``AMS_1045`` the releases of both
+    its publications, each once for each agency acronym of its publication, so the page's 25
+    rows hold 13 releases (``docs/upstream/OBSERVED.md``, "An identifier that two
+    publications share answers both")."""
+    case = f"{SHARED}_page0"
+    route = replay_fixture("release_find_by_identifier", case, match_params=["page"])
+    result = tasks.list_releases("AMS_1045", page=0)
+    assert result.data == releases_of(case)
+    assert len(result.data) == 25
+    assert len({release.id for release in result.data}) == 13
+    assert [(release.id, release.agency_acronym) for release in result.data[:2]] == [
+        ("794730", "AMS"),
+        ("794730", "AMS-DA"),
+    ]
+    assert result.data[0].identifier == ["AMS_1045"], "publication 1443's identifier"
+    assert {tuple(release.identifier) for release in result.data[2:]} == {
+        ("MD_DA530", "AMS_1045")
+    }, "publication 2064's identifiers"
+    assert result.meta.total == 706, "upstream's count of rows, both publications' together"
+    assert result.meta.notes == []
+    assert result.meta.request == {"publication_identifier": "AMS_1045", "page": 0}
+    assert sent_urls(route) == [f"{API}/release/findByIdentifier/AMS_1045?page=0"]
 
 
 def test_list_releases_walks_to_the_first_page_whose_newest_release_is_before_since(
