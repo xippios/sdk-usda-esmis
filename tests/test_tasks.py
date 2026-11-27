@@ -86,7 +86,9 @@ API = f"{BASE_URL}/api/v1"
 WASDE_RELEASES = f"{API}/release/findByIdentifier/wasde"
 ALL_RELEASES = f"{API}/release/findAll"
 WASDE_TXT = f"{BASE_URL}/sites/default/release-files/796099/wasde1026.txt"
-FORMATS = {"pdf", "txt", "xls", "xml", "zip"}
+FORMATS = {"pdf", "txt", "xls", "xml", "zip", "doc", "asc"}
+"""Every format of a file of a release that a recording holds, ``.doc`` and ``.asc`` on two
+older WASDE releases (``docs/upstream/OBSERVED.md``, "A release lists one to seven files")."""
 OCTOBER_PRINTED = datetime(2026, 10, 9, 12, 0)
 """The October 2026 WASDE's ``release_datetime`` as printed, its ``+0000`` dropped."""
 PACKAGE = "xippios.usda.esmis"
@@ -133,6 +135,11 @@ NOVEMBER = [f"wasde_2026_11_27_page{page}" for page in range(8)]
 SHARED = "AMS_1045_2026_11_27"
 """The answers recorded on 2026-11-27 for ``AMS_1045``, an identifier of publications 1443 and
 2064: the publication lookup, and page 0 of the release list, ``SHARED + "_page0"``."""
+
+
+def recorded_releases(endpoint: str, case: str) -> list[Release]:
+    """The releases of a recorded answer that lists them."""
+    return recorded(ReleaseResults, endpoint, case).results
 
 
 def recent_of(case: str) -> list[Release]:
@@ -1323,28 +1330,89 @@ def test_a_choice_the_release_cannot_serve_is_refused(
     assert caught.value.source == SOURCE
 
 
-@pytest.mark.parametrize(
-    ("endpoint", "case"),
-    [
-        ("release_find_all", "page0"),
-        ("release_find_all", "page1"),
-        ("release_find_by_id", "796099"),
-        ("release_find_by_id", "95621"),
-        ("release_find_by_identifier", "wasde_page0"),
-        ("release_find_by_identifier", "wasde_page1"),
-        ("release_find_by_pub_id", "1659_page0"),
-    ],
-)
+RECORDED_RELEASES = [
+    ("release_find_all", "page0"),
+    ("release_find_all", "page1"),
+    ("release_find_by_id", "796099"),
+    ("release_find_by_id", "95621"),
+    ("release_find_by_identifier", "wasde_page0"),
+    ("release_find_by_identifier", "wasde_page1"),
+    *(("release_find_by_identifier", case) for case in NOVEMBER),
+    ("release_find_by_identifier", f"{SHARED}_page0"),
+    ("release_find_by_pub_id", "1659_page0"),
+]
+"""Every recorded answer that lists releases with their files."""
+
+
+@pytest.mark.parametrize(("endpoint", "case"), RECORDED_RELEASES)
 def test_every_recorded_file_has_a_name_and_a_known_format(endpoint: str, case: str) -> None:
-    for release in recorded(ReleaseResults, endpoint, case).results:
+    for release in recorded_releases(endpoint, case):
         files = release.release_files()
         assert files == [ReleaseFile.from_url(url) for url in release.files]
         assert [file.url for file in files] == release.files, "verbatim, in upstream order"
         for file in files:
             assert file.url.endswith(f"/{file.name}")
             assert "/" not in file.name
-            assert file.name.endswith(f".{file.format}")
+            assert file.name.lower().endswith(f".{file.format}"), "AMS_1045.PDF among them"
             assert file.format in FORMATS, file.url
+
+
+def test_the_texts_on_formats_give_examples_and_name_every_recorded_one() -> None:
+    """The description of ``get_release`` and the docstring of ``ReleaseFile`` name every
+    format a recording holds, and the description gives them as examples, so that no text
+    reads as the whole list (https://github.com/xippios/sdk-usda-esmis/issues/76)."""
+    recorded = {
+        file.format
+        for endpoint, case in RECORDED_RELEASES
+        for release in recorded_releases(endpoint, case)
+        for file in release.release_files()
+    }
+    assert recorded == FORMATS
+    description = " ".join((tasks.get_release.__doc__ or "").split("Args:")[0].split())
+    model = " ".join((ReleaseFile.__doc__ or "").split("Attributes:")[0].split())
+    assert sorted(f for f in FORMATS if f'``"{f}"``' not in description) == []
+    assert sorted(f for f in FORMATS if f"``{f}``" not in model) == []
+    assert 'e.g. ``"pdf"``' in description, "examples, not the whole list"
+
+
+JULY_2013 = [
+    "R1wasde-07-11-2013.pdf",
+    "wasde-07-11-2013.xml",
+    "ORIGwasde-07-11-2013.xls",
+    "wasde-07-11-2013.pdf",
+    "R1wasde-07-11-2013.xls",
+    "ORIGwasde-07-11-2013.pdf",
+    "wasde-07-11-2013.xls",
+]
+"""The files of release 95622, the WASDE of 2013-07-11, in upstream order, as page 7 of
+``NOVEMBER`` lists them: its first PDF is the revision ``R1``, its first XLS the original."""
+
+
+def july_2013() -> Release:
+    (release,) = [release for release in releases_of(NOVEMBER[7]) if release.id == "95622"]
+    return release
+
+
+def test_release_files_of_95622_list_a_revision_first() -> None:
+    assert [file.name for file in july_2013().release_files()] == JULY_2013
+
+
+@pytest.mark.parametrize(
+    ("format", "name", "chosen"),
+    [
+        ("pdf", None, "R1wasde-07-11-2013.pdf"),
+        ("xls", None, "ORIGwasde-07-11-2013.xls"),
+        ("xml", None, "wasde-07-11-2013.xml"),
+        *((None, name, name) for name in JULY_2013),
+    ],
+    ids=["format-pdf-revision", "format-xls-original", "format-xml", *JULY_2013],
+)
+def test_format_alone_takes_the_first_file_listed_and_name_any_other(
+    format: str | None, name: str | None, chosen: str
+) -> None:
+    """``format`` alone takes the file ESMIS lists first, a revision or an original, and
+    ``name`` reaches each file (https://github.com/xippios/sdk-usda-esmis/issues/77)."""
+    assert tasks._select(july_2013(), format, name).name == chosen
 
 
 @pytest.mark.parametrize(
