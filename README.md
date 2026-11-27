@@ -38,8 +38,10 @@ here with their public issue (sdk-core ADR-0060, decision 8):
 What the package adds is a walk of a list's pages under one bound, filters that keep the
 releases of a list by their printed date, and filters that select rows of the packaged
 table by text or by agency. It parses no released file (sdk-core ADR-0020) and picks no
-latest release for the caller: the first row of `list_releases(identifier, page=0)` is the
-publication's latest, as ESMIS lists them.
+latest release for the caller: ESMIS lists a publication's releases newest first page by
+page, some older ones listed early and out of place, so the first row of
+`list_releases(identifier, page=0)` is the publication's latest
+(`docs/upstream/OBSERVED.md`).
 
 ## Install
 
@@ -58,7 +60,7 @@ from pathlib import Path
 
 from xippios.usda.esmis import download_release_file, get_release, list_releases
 
-latest = list_releases("wasde", page=0).data[0]  # newest first: the latest WASDE release
+latest = list_releases("wasde", page=0).data[0]  # row 0 of page 0: the latest WASDE release
 latest.id, latest.release_datetime  # "796099", 2026-10-09 12:00:00+00:00, as printed
 
 release = get_release(int(latest.id))  # with each file's URL
@@ -79,14 +81,16 @@ position, and every other argument by name: `since`, `until` and `page` of the r
 lists, `page` of `search_publications`, `search` and `agency_acronym` of
 `list_publications`, and `dest`, `format` and `name` of `download_release_file`, whose
 `dest` is required. `search_publications("wasde")` finds a publication's identifiers, and
-`list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, newest first.
+`list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, in ESMIS's
+order, to the first page whose newest release is dated before it.
 `list_recent_releases(since=date(2026, 10, 20))` lists what USDA released across every
 publication since a date, latest catalogued first. A walk of pages sends at most 24
 requests, in Python and over MCP alike, and one that needs more is refused and returns
 nothing, naming `page`: after its first request where upstream's count shows it, as for
 `list_releases("wasde")` without `since`, WASDE's 703 releases filling 29 pages, and
 `list_recent_releases` without `since`, and after its 24th where a walk from `since`
-reaches no page that ends it within them. A walk from a
+reaches no page that ends it within them, as for WASDE's releases from a `since` before
+1982-02-12 on its list of 2026-11-27. A walk from a
 `since` before 2025-09-12, ESMIS's migration, is refused before any request, as the older
 ids do not follow the release dates; `list_releases` or `page` serves older dates. A
 second call within 300 seconds is answered from the client's cache, its
@@ -146,7 +150,7 @@ exactly tasks.__all__, and tasks_write.__all__ where the package has write tasks
 | `esmis_api_publication_findAll`, every page, packaged (fetched 2026-10-27; no request) | `list_publications(*, search=None, agency_acronym=None)` | `usda_esmis_list_publications` | alpha |
 | `esmis_api_publication_search`, every page, at most 24, unless `page` is given | `search_publications(query, *, page=None)` | `usda_esmis_search_publications` | alpha |
 | `esmis_api_publication_findByIdentifier` | `get_publication(publication_identifier)` | `usda_esmis_get_publication` | alpha |
-| `esmis_api_release_findByIdentifier`, pages walked newest first, at most 24, unless `page` is given | `list_releases(publication_identifier, *, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |
+| `esmis_api_release_findByIdentifier`, pages walked from 0 down to `since` (to the first page whose newest release is dated before it), at most 24, unless `page` is given | `list_releases(publication_identifier, *, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |
 | `esmis_api_release_findAll`, every publication's releases, pages walked from 0 down to `since` (to the first page whose newest release is dated more than 14 days before it), at most 24, unless `page` is given | `list_recent_releases(*, since=None, until=None, page=None)`, refused past 24 pages, so without `since`, and for a walk from a `since` before 2025-09-12 | `usda_esmis_list_recent_releases` | alpha |
 | `esmis_api_release_findById` | `get_release(release_id)`, each file's URL in its answer, `Release.release_files()` their names and formats | `usda_esmis_get_release` | alpha |
 | `esmis_api_release_findById`, then the file | `download_release_file(release_id, *, dest, format=None, name=None)`, a bulk task: `dest` required, the file chosen by `format`, `name` or both | none, Python only | alpha |

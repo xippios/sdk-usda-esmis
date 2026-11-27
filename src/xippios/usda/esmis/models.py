@@ -291,7 +291,7 @@ class Release(UpstreamModel):
             ``esmis_api_release_findById``.
         files: ``files``, absolute URLs, e.g.
             ``["https://esmis.nal.usda.gov/sites/default/release-files/796099/wasde1026.pdf",
-            ...]``; one to six per recorded release.
+            ...]``; one to seven per recorded release.
         title: ``title``, the publication's title, e.g. ``"World Agricultural Supply and
             Demand Estimates"``.
         release_datetime: ``release_datetime``, printed ``YYYY-MM-DDTHH:MM:SS+0000``,

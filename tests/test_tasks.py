@@ -9,9 +9,9 @@ built (conventions §10).
 ``list_publications`` answers from the packaged tables in ``reference/`` and sends
 nothing: its tests mount no fixture and check that no request left. Four answers
 were recorded for the tasks: WASDE's release page 1 (``release_find_by_identifier/
-wasde_page1.json``), whose ids from before ESMIS's migration do not follow the dates, the October
-2026 WASDE ``.txt`` (``download_release_file/wasde1026_txt.json``), the exchange the
-download replays, and, on 2026-10-28, the WASDE of 2013-08-12
+wasde_page1.json``), whose ids from before ESMIS's migration do not follow the dates,
+the October 2026 WASDE ``.txt`` (``download_release_file/wasde1026_txt.json``), the
+exchange the download replays, and, on 2026-10-28, the WASDE of 2013-08-12
 (``release_find_by_id/95621.json``), whose original and revised files of one format the
 download's choice by ``format`` and ``name`` is tested on, without a download, and page 1
 of every release (``release_find_all/page1.json``), which the walk of
