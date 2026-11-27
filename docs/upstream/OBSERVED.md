@@ -313,7 +313,11 @@ WASDE's PDF, TXT, XLS and XML; 42 three, a PDF, a TXT and a ZIP; the four of
 a revised file of each of three formats (`ORIGwasde-08-12-2013.xml` before
 `wasde-08-12-2013.xml`). WASDE's pages 0 to 7 of 2026-11-27 hold one release of seven,
 95622 of 2013-07-11, which lists an `ORIG`, an `R1` and a plain file of the PDF and the
-XLS beside one XML, and three older releases with other files: 95715 a
+XLS beside one XML, in this order: `R1wasde-07-11-2013.pdf`, `wasde-07-11-2013.xml`,
+`ORIGwasde-07-11-2013.xls`, `wasde-07-11-2013.pdf`, `R1wasde-07-11-2013.xls`,
+`ORIGwasde-07-11-2013.pdf` and `wasde-07-11-2013.xls`. So the first file of a format can
+be a revision, as 95622's PDF is, or the original, as its XLS and 95621's XML are. They
+hold three older releases with other files too: 95715 a
 `wasde-05-12-2006_Revisions.doc` beside a TXT and a PDF, 95616 one file,
 `wasde-01-23-2014.asc`, and 95866 a `readme.txt` with `95501.zip`. No answer states a
 file's size.

@@ -728,9 +728,10 @@ async def get_release_async(release_id: int) -> Result[Release]:
 
     One request (``esmis_api_release_findById``); an id ESMIS does not know raises
     ``NotFoundError`` (HTTP 404). ``files`` holds each file's URL in upstream order, its name
-    the URL's last segment (``"wasde1026.txt"``), its format the extension (``"pdf"``,
-    ``"txt"``, ``"xls"``, ``"xml"``, ``"zip"``), which ``Release.release_files()`` reads in
-    Python; a release can keep an original and a revised file of one format (release 95621).
+    the URL's last segment (``"wasde1026.txt"``), its format the extension, e.g. ``"pdf"``,
+    ``"txt"``, ``"xls"``, ``"xml"``, ``"zip"``, ``"doc"`` or ``"asc"``, which
+    ``Release.release_files()`` reads in Python; a release can keep an original and a revised
+    file of one format, either listed first (releases 95621 and 95622).
     The catalog states no size, and ``download_release_file`` fetches a file in Python alone.
     ``meta.vintage`` is the release id, e.g. ``"796099"``. ``meta.published_at`` is the
     release's ``release_datetime`` as printed with its ``+0000`` dropped, flagged
@@ -786,9 +787,12 @@ async def download_release_file_async(
             ``Path("reports") / "wasde1026.txt"``; a file there is replaced.
         format: The file's format as ``Release.release_files()`` gives it, the extension in
             lower case, e.g. ``"txt"``, ``"xls"``, ``"xml"``, ``"pdf"``, ``"zip"``: the
-            first file of that format. For release 95621, ``"xml"`` takes
-            ``ORIGwasde-08-12-2013.xml``, the original, listed before the revised
-            ``wasde-08-12-2013.xml``. ``None`` (the default) leaves the choice to ``name``.
+            first file of that format as ESMIS lists them, an original or a revision, and
+            ``name`` reaches the others. For release 95621, ``"xml"`` takes the original
+            ``ORIGwasde-08-12-2013.xml``, listed before the revised ``wasde-08-12-2013.xml``;
+            for release 95622, ``"pdf"`` takes the revision ``R1wasde-07-11-2013.pdf``,
+            listed before ``wasde-07-11-2013.pdf`` and ``ORIGwasde-07-11-2013.pdf``.
+            ``None`` (the default) leaves the choice to ``name``.
         name: A file's name as ``Release.release_files()`` gives it, e.g.
             ``name="wasde-08-12-2013.xml"`` for release 95621, the revised XML, which
             ``format="xml"`` alone does not reach, or ``name="wasde1026.txt"`` for

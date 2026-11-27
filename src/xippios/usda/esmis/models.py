@@ -336,13 +336,17 @@ class ReleaseFile(UpstreamModel):
 
     Read from the URL's text alone, as upstream prints it, by ``from_url``; nothing is
     fetched, decoded or renamed. The catalog states no size, so none is given: a download
-    reports its bytes. Recorded release files are named ``<name>.<extension>`` with the
-    extensions ``pdf``, ``txt``, ``xls``, ``xml`` and ``zip``
+    reports its bytes. Recorded release files are named ``<name>.<extension>``, most with
+    the extensions ``pdf``, ``txt``, ``xls``, ``xml`` and ``zip``
     (``tests/fixtures/release_find_all/page0.json``,
-    ``release_find_by_identifier/wasde_page0.json``); a few WASDE releases name a file
-    ``latest.pdf`` or ``wasde0626v2.txt``, and the WASDE of 2013-08-12 lists an original
-    and a revised file of one format, ``ORIGwasde-08-12-2013.xml`` and
-    ``wasde-08-12-2013.xml`` (``release_find_by_id/95621.json``).
+    ``release_find_by_identifier/wasde_page0.json``), and two older WASDE releases with
+    ``doc`` and ``asc`` (``docs/upstream/OBSERVED.md``, "A release lists one to seven
+    files"); a few WASDE releases name a file ``latest.pdf`` or ``wasde0626v2.txt``. A
+    release can list an original and a revised file of one format, either first: the WASDE
+    of 2013-08-12 lists ``ORIGwasde-08-12-2013.xml`` before ``wasde-08-12-2013.xml``
+    (``release_find_by_id/95621.json``), and that of 2013-07-11 ``R1wasde-07-11-2013.pdf``
+    before ``wasde-07-11-2013.pdf``
+    (``release_find_by_identifier/wasde_2026_11_27_page7.json``).
 
     Attributes:
         url: The item of ``Release.files`` verbatim, e.g.
