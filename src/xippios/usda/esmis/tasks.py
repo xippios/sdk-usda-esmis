@@ -16,10 +16,11 @@ What every task follows:
   ``meta.total`` is ``pager.total_results`` of the last page fetched for the three paged
   list tasks (sdk-core ADR-0034), ``None`` elsewhere.
   ``meta.retrieved_at`` is the client's time of the answer, the oldest where a task reads
-  several pages (sdk-core ADR-0037): the client keeps upstream's answers in core's response
-  cache for 300 s, so a cached answer's time is when it was stored. ``list_publications``
-  carries the packaged table's ``fetched``. ``meta.names`` names the agency of every release
-  and publication an answer holds, by the packaged agency list (sdk-core ADR-0067).
+  several, a walk's pages or a release and its file (sdk-core ADR-0037; conventions §4):
+  the client keeps upstream's answers in core's response cache for 300 s, so a cached
+  answer's time is when it was stored. ``list_publications`` carries the packaged table's
+  ``fetched``. ``meta.names`` names the agency of every release and publication an answer
+  holds, by the packaged agency list (sdk-core ADR-0067).
 - The packaged answer: ``list_publications`` answers from ``reference/publication.json``,
   the table ``scripts/refresh_reference.py`` wrote from every page of
   ``esmis_api_publication_findAll``, and checks its ``agency_acronym`` against
@@ -773,7 +774,8 @@ async def download_release_file_async(
     ``meta.endpoint`` is the file's name as upstream prints it (``"wasde1026.txt"``),
     ``meta.vintage`` the release id, ``meta.request`` the release id, ``format`` and
     ``name`` as given, those left ``None`` omitted, and the file's URL, and
-    ``meta.retrieved_at`` the time the file was complete. ``meta.published_at`` is the
+    ``meta.retrieved_at`` the older of the release lookup's time and the time the file was
+    complete. ``meta.published_at`` is the
     release's ``release_datetime`` as printed with its ``+0000`` dropped, flagged
     ``published_at_naive``: ESMIS's own calendar puts the release at noon Eastern while
     the API prints ``+0000``, so the time is upstream's text, never converted.
@@ -806,7 +808,8 @@ async def download_release_file_async(
     chosen = _select(release, format, name)
     downloaded = await client.download(chosen.url, target)
     request = {"release_id": release_id, "format": format, "name": name, "url": chosen.url}
-    meta = _meta(chosen.name, [downloaded.retrieved_at], request, release=release)
+    retrieved = [found.retrieved_at, downloaded.retrieved_at]
+    meta = _meta(chosen.name, retrieved, request, release=release)
     return Result(data=downloaded, meta=meta)
 
 
