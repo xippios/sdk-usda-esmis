@@ -139,10 +139,11 @@ lists `MD_DA530` and `AMS_1045`, both titled `Dry Whey - Central U.S.`, with
 `total_results` 2. `/release/findByIdentifier` answers the releases of both publications
 in one list: for `AMS_1045` it counted 706 on 29 pages, and its page 0 held, latest first,
 release 794730 of 2025-09-26, which carries `AMS_1045` alone, before releases 420677 to
-420688 of 2025-08-18 back to 2025-06-02, which carry both identifiers. Each release stood
-on the page once for each agency acronym of its publication, `AMS` and `AMS-DA`, the two
-rows alike but for `agency_acronym`, so the page's 25 rows held 13 releases, and the
-pager counts rows. The packaged table lists 94 identifiers that two publications share.
+420688 of 2025-08-18 back to 2025-06-02, which carry both identifiers. A release stood on
+the list once for each agency acronym of its publication, `AMS` and `AMS-DA`, the two rows
+alike but for `agency_acronym`, and the pager counts rows: the page's 25 rows held twelve
+releases twice, 794730 to 420687, and the last, 420688, once, in its last row. The packaged
+table lists 94 identifiers that two publications share.
 
 Probe: 2026-11-26, `esmis_api_publication_findByIdentifier` and
 `esmis_api_release_findByIdentifier`, page 0, for `AMS_1045`, one request each and

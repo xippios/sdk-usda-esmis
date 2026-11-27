@@ -425,8 +425,8 @@ async def _release(release_id: int) -> Answer[Release]:
 async def list_agencies_async() -> Result[list[Agency]]:
     """Every agency ESMIS publishes reports for, with its acronym, contacts and homepage.
 
-    Nine agencies as recorded on 2026-10-27, from ``"FAS"`` and ``"WAOB"`` to
-    ``"AMS-LPS"``, in upstream order, from one request (``esmis_api_agency_findAll``).
+    Upstream's list, in upstream order, from one request (``esmis_api_agency_findAll``):
+    the packaged agency table holds nine, from ``"FAS"`` and ``"WAOB"`` to ``"AMS-LPS"``.
     ``meta.total`` stays empty: upstream counts nothing for this list.
     """
     answer = await api.agency_find_all()
@@ -596,8 +596,7 @@ async def list_releases_async(
         since: The earliest release date to keep, e.g. ``2026-01-01`` (a date); without
             ``page`` the walk reads one page past the last release it keeps, and a walk
             that 24 pages do not end is refused after them, naming ``page``, as WASDE's is
-            for a ``since`` before 1982-02-12 (ESMIS's note "A publication's releases come
-            newest first page by page"). ``None`` (the default) keeps every one.
+            for a ``since`` before 1982-02-12. ``None`` (the default) keeps every one.
         until: The latest release date to keep, e.g. ``2026-06-30`` (a date); ``None``
             (the default) keeps every one.
         page: A 0-based page of 25, e.g. ``0`` for the newest releases; ``None`` (the
