@@ -101,18 +101,20 @@ and `release_find_by_identifier/unknown.json`.
 
 ### Answers carry ESMIS's own cache headers
 
-Every answer of HTTP 200 recorded under `/api/v1/` carries `cache-control: max-age=3600,
-public` and an `x-drupal-cache` header: `HIT` on the release lists and the WASDE lookups,
-which Drupal answered from its cache, and `MISS` on the agency lookups and the publication
-lists, which it rendered anew. The answers to an unknown id, HTTP 404, carry
-`must-revalidate, no-cache, private` and `x-drupal-cache: UNCACHEABLE (no cacheability)`,
-and a search without a query `UNCACHEABLE (response policy)`. So a cache between may keep
-an answer for an hour; how long ESMIS's answer lags a new release is not recorded.
+Of the 23 answers of HTTP 200 recorded under `/api/v1/`, 21 carry `cache-control:
+max-age=3600, public` and an `x-drupal-cache` header, whatever the operation: `HIT` on 9,
+which Drupal answered from its cache, and `MISS` on 12, which it rendered anew, as
+publication 1659 is a `HIT` and publication 1863 a `MISS` of `/publication/findById`. The
+other two, the searches without a query and with an empty one, carry `must-revalidate,
+no-cache, private` and `x-drupal-cache: UNCACHEABLE (response policy)`. The four answers
+to an unknown id, HTTP 404, carry `must-revalidate, no-cache, private` and
+`x-drupal-cache: UNCACHEABLE (no cacheability)`. So a cache between may keep most answers
+for an hour; how long ESMIS's answer lags a new release is not recorded.
 
-Probe: 2026-10-27 and 2026-10-28, the answers recorded for every wrapper; samples
-`release_find_all/page0.json` and `release_find_by_identifier/wasde_page0.json` (`HIT`),
-`agency_find_all/all.json` and `publication_find_all/page0.json` (`MISS`),
-`release_find_by_id/unknown.json` and `publication_search/no_query.json`.
+Probe: 2026-10-27 and 2026-10-28, the 28 answers recorded under `/api/v1/` for every
+wrapper; samples `publication_find_by_id/1659.json` (`HIT`),
+`publication_find_by_id/1863.json` (`MISS`), `publication_search/no_query.json` and
+`publication_search/empty_query.json`, and `release_find_by_id/unknown.json`.
 
 ### An identifier carrying `/` cannot be looked up
 
@@ -209,7 +211,8 @@ Probe: 2026-10-27 and 2026-10-28, `esmis_api_release_findAll`, pages 0 and 1; sa
 
 A publication's releases (`/release/findByIdentifier`) come latest `release_datetime`
 first whatever their ids, as recorded on WASDE's pages 0 and 1: 50 releases, 2026-10-09
-back to 2022-08-12, of the 703 on 29 pages that the pager counted.
+back to 2022-08-12, of the 703 on 29 pages that the pager counted, an order that
+https://github.com/xippios/sdk-usda-esmis/issues/67 reports pages 3 and 4 do not hold.
 
 Probe: 2026-10-27, `esmis_api_release_findByIdentifier` for `wasde`, pages 0 and 1;
 samples `release_find_by_identifier/wasde_page0.json` and

@@ -170,8 +170,8 @@ where it changes them.
 - **The cache.** The client keeps upstream's answers in core's response cache for its
   default 300 s, every path (sdk-core ADR-0061, decision 11), so a second call within that
   time sends nothing and its `meta.retrieved_at` is when the first answer was stored; a
-  file that `download_release_file` streams is never kept. ESMIS's own answers allow a
-  cache an hour ("Answers carry ESMIS's own cache headers").
+  file that `download_release_file` streams is never kept. Most of ESMIS's own answers
+  allow a cache an hour ("Answers carry ESMIS's own cache headers").
 - **The caps.** Every tool keeps the default cap (200 rows or 64 KB); `MCP_CAPS` gives
   four tools a note of their own that names their parameters for seeing the rest
   (sdk-core ADR-0038, conventions §8): `list_publications` (next item), and the three the
