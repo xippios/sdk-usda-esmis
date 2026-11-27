@@ -19,6 +19,7 @@ of every release (``release_find_all/page1.json``), which the walk of
 type, never by what the file says (sdk-core ADR-0020).
 """
 
+import importlib
 import inspect
 import json
 import re
@@ -104,7 +105,13 @@ def recorded_body(endpoint: str, case: str) -> Any:
 
 
 def recorded[T](type_: type[T], endpoint: str, case: str) -> T:
-    """A recorded answer, parsed as the wrapper parses it."""
+    """A recorded answer, parsed as the wrapper parses it.
+
+    The parsed recording is an input of the test, not an answer from ESMIS: no route serves
+    it and no ``classify`` reads it, and a test compares it or hands it straight to the code
+    under test, ``Release.release_files()`` and the walks' stop rules among them (conventions
+    §10; sdk-core ADR-0064, decision 3).
+    """
     return TypeAdapter(type_).validate_python(recorded_body(endpoint, case))
 
 
@@ -119,6 +126,66 @@ def recent_of(case: str) -> list[Release]:
 
 def printed_date(release: Release) -> date:
     return release.release_datetime.date()
+
+
+def call_form(task: Callable[..., object]) -> str:
+    """A task's signature as a caller writes the call: its parameters' kinds and defaults."""
+    signature = inspect.signature(task)
+    parameters = [
+        parameter.replace(annotation=parameter.empty) for parameter in signature.parameters.values()
+    ]
+    return str(signature.replace(parameters=parameters, return_annotation=signature.empty))
+
+
+CALL_FORMS = {
+    "list_agencies": "()",
+    "list_publications": "(*, search=None, agency_acronym=None)",
+    "search_publications": "(query, *, page=None)",
+    "get_publication": "(publication_identifier)",
+    "list_releases": "(publication_identifier, *, since=None, until=None, page=None)",
+    "list_recent_releases": "(*, since=None, until=None, page=None)",
+    "get_release": "(release_id)",
+    "download_release_file": "(release_id, *, dest, format=None, name=None)",
+}
+"""Each task's call form: what identifies a record by position, in the order of upstream's
+path, and every filter and every argument of the package's own by name (sdk-core ADR-0061,
+decision 5; https://github.com/xippios/sdk-usda-esr/issues/60, part 1)."""
+
+
+@pytest.mark.parametrize(("name", "form"), CALL_FORMS.items(), ids=CALL_FORMS)
+def test_the_arguments_that_name_a_record_come_first_and_the_rest_by_name(
+    name: str, form: str
+) -> None:
+    assert sorted(CALL_FORMS) == sorted(tasks.__all__)
+    assert call_form(getattr(tasks, name)) == form
+    assert call_form(getattr(tasks, f"{name}_async")) == form
+
+
+UNTYPED: Any = tasks
+"""The tasks without their types, for the calls that their signatures refuse."""
+
+BY_POSITION: dict[str, Callable[[Path], object]] = {
+    "list_publications": lambda _: UNTYPED.list_publications("wheat"),
+    "search_publications": lambda _: UNTYPED.search_publications("wasde", 0),
+    "list_releases": lambda _: UNTYPED.list_releases("wasde", date(2026, 1, 1)),
+    "list_recent_releases": lambda _: UNTYPED.list_recent_releases(date(2026, 10, 20)),
+    "download_release_file": lambda dest: UNTYPED.download_release_file(796099, "txt", dest),
+    "download_release_file-without-dest": lambda _: UNTYPED.download_release_file(
+        796099, format="txt"
+    ),
+}
+"""Calls that pass a filter, or an argument of the package's own, by position, and the
+download without its ``dest``."""
+
+
+@pytest.mark.parametrize("call", BY_POSITION.values(), ids=BY_POSITION)
+def test_a_filter_by_position_is_refused_before_any_request(
+    respx_mock: respx.MockRouter, tmp_path: Path, call: Callable[[Path], object]
+) -> None:
+    with pytest.raises(TypeError):
+        call(tmp_path / "wasde1026.txt")
+    assert respx_mock.calls.call_count == 0
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_list_agencies(replay_fixture: ReplayFixture) -> None:
@@ -294,6 +361,17 @@ def test_publication_row_is_a_projection_of_publication() -> None:
         assert_projection(PublicationRow.project(publication), publication)
 
 
+def test_every_publication_but_654_has_an_identifier_without_a_slash() -> None:
+    """What the texts on an identifier with ``/`` say, counted in the packaged table."""
+    publications = PackagedList.load(PACKAGE, "publication").parse(PublicationRow, source=SOURCE)
+    slashed = [row for row in publications if any("/" in name for name in row.identifier)]
+    alone = [row for row in slashed if all("/" in name for name in row.identifier)]
+    assert (len(slashed), len(alone)) == (71, 1)
+    assert [(row.id, row.identifier) for row in alone] == [
+        ("654", ["Market Trade Economic Division/SSS-yearbook"])
+    ]
+
+
 CAP_NOTE = (
     "showing 200 of 2522 rows (cap: 200 rows or 65536 bytes); filter with search (text of an "
     "id, an identifier or a title) or agency_acronym (as list_agencies spells it) to narrow "
@@ -458,6 +536,30 @@ def test_get_publication(replay_fixture: ReplayFixture) -> None:
     assert sent_urls(route) == [f"{API}/publication/findByIdentifier/wasde"]
 
 
+def test_get_publication_refuses_an_identifier_that_two_publications_share(
+    respx_mock: respx.MockRouter,
+) -> None:
+    """NOT RECORDED: the recorded answer of ``publication_find_by_identifier/wasde.json`` with
+    a second recorded publication, 1762 of ``publication_search/wasde_page0.json``, appended to
+    its results and its pager counting 2, the form that the probe of ``AMS_1045`` saw and no
+    fixture holds (conventions §10, kind 4)."""
+    body = recorded_body("publication_find_by_identifier", "wasde")
+    second = recorded_body("publication_search", "wasde_page0")["results"][0]
+    assert second["id"] == "1762"
+    body["results"].append(second)
+    body["pager"]["total_results"] = 2
+    route = respx_mock.get(f"{API}/publication/findByIdentifier/wasde").respond(json=body)
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks.get_publication("wasde")
+    assert str(caught.value) == (
+        "ESMIS answered GET /api/v1/publication/findByIdentifier/wasde with 2 publications, "
+        "1659 and 1762, so the identifier names no one publication and none is returned; "
+        f"{SEARCH_BY_KEYWORD}, and its answer holds each publication whole."
+    )
+    assert caught.value.source == SOURCE
+    assert sent_urls(route) == [f"{API}/publication/findByIdentifier/wasde"]
+
+
 def test_get_publication_unknown_is_not_found(replay_fixture: ReplayFixture) -> None:
     replay_fixture("publication_find_by_identifier", "unknown")
     with pytest.raises(NotFoundError) as caught:
@@ -471,8 +573,20 @@ def test_get_publication_unknown_is_not_found(replay_fixture: ReplayFixture) -> 
 
 def test_get_publication_with_a_slash_is_refused(replay_fixture: ReplayFixture) -> None:
     replay_fixture("publication_find_by_identifier", "with_slash")
-    with pytest.raises(InvalidRequestError, match="encoded slash"):
+    with pytest.raises(InvalidRequestError, match="encoded slash") as caught:
         tasks.get_publication("Market and Trade Economics Division/FDS")
+    message = str(caught.value)
+    assert message.endswith("every publication but 654 has one without '/'.")
+    named = re.findall(r"\b(?:list|get|search|download)_[a-z_]+", message)
+    assert named == ["list_publications"], "a lookup that a task has, and no other"
+
+
+def test_the_texts_on_a_slash_say_that_publication_654_has_no_other() -> None:
+    """The tool's description and the arguments' texts that ask for an identifier without
+    ``/`` say that publication 654 has none, as the packaged table counts it."""
+    for task in (tasks.get_publication, tasks.list_releases):
+        assert "publication 654" in (task.__doc__ or ""), task.__name__
+    assert "but publication 654" in (tasks.get_publication.__doc__ or "").split("Args:")[0]
 
 
 def test_list_releases_one_page(replay_fixture: ReplayFixture) -> None:
@@ -554,11 +668,25 @@ def test_the_latest_release_is_the_first_row_of_page_zero(replay_fixture: Replay
 
 
 def test_list_releases_unknown_identifier_is_empty(replay_fixture: ReplayFixture) -> None:
+    """The empty list and a note that says what upstream counted, where upstream answers so."""
     route = replay_fixture("release_find_by_identifier", "unknown")
     result = tasks.list_releases("nope-nope")
     assert result.data == []
     assert result.meta.total == 0, "as the pager says"
+    assert result.meta.notes == [
+        "ESMIS counts no release for the identifier 'nope-nope', as it answers an identifier "
+        f"it does not know; {SEARCH_BY_KEYWORD}."
+    ]
     assert sent_urls(route) == [f"{API}/release/findByIdentifier/nope-nope?page=0"]
+
+
+def test_list_releases_writes_no_note_where_upstream_counts_releases(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """A date filter that keeps no release is the package's own: upstream counted 703."""
+    replay_fixture("release_find_by_identifier", "wasde_page0", match_params=["page"])
+    result = tasks.list_releases("wasde", since=date(2026, 10, 10), until=date(2026, 10, 11))
+    assert (result.data, result.meta.total, result.meta.notes) == ([], 703, [])
 
 
 def test_list_releases_refuses_since_after_until(replay_fixture: ReplayFixture) -> None:
@@ -863,7 +991,21 @@ def test_get_release(replay_fixture: ReplayFixture) -> None:
     assert result.meta.request == {"release_id": 796099}
     assert result.meta.total is None
     assert result.meta.names == {"agency_acronym": WAOB}, "by the packaged agency list"
+    assert result.data.files == [
+        f"{BASE_URL}/sites/default/release-files/796099/wasde1026.{kind}"
+        for kind in ("pdf", "txt", "xls", "xml")
+    ], "each file's URL, in upstream order"
     assert sent_urls(route) == [f"{API}/release/findById/796099"]
+
+
+def test_the_files_of_a_release_are_get_release_s_answer() -> None:
+    """No task lists a release's files beside ``get_release``, whose answer holds their URLs
+    and whose ``Release.release_files()`` reads their names and formats in Python."""
+    package = importlib.import_module(PACKAGE)
+    assert "list_release_files" not in tasks.__all__
+    assert "list_release_files" not in package.__all__
+    assert not hasattr(tasks, "list_release_files")
+    assert not hasattr(tasks, "list_release_files_async")
 
 
 def test_a_second_call_within_the_cache_lifetime_sends_no_request(
@@ -886,10 +1028,10 @@ def test_get_release_unknown_is_not_found(replay_fixture: ReplayFixture) -> None
         tasks.get_release(999999999)
 
 
-def test_list_release_files(replay_fixture: ReplayFixture) -> None:
-    route = replay_fixture("release_find_by_id", "796099")
-    result = tasks.list_release_files(796099)
-    assert result.data == [
+def test_release_files_reads_each_file_s_url_name_and_format() -> None:
+    """``Release.release_files()`` on the release that ``get_release(796099)`` answers."""
+    (release,) = recorded(ReleaseResults, "release_find_by_id", "796099").results
+    assert release.release_files() == [
         ReleaseFile(
             url=f"{BASE_URL}/sites/default/release-files/796099/wasde1026.{kind}",
             name=f"wasde1026.{kind}",
@@ -897,11 +1039,6 @@ def test_list_release_files(replay_fixture: ReplayFixture) -> None:
         )
         for kind in ("pdf", "txt", "xls", "xml")
     ]
-    assert result.meta.endpoint == "esmis_api_release_findById"
-    assert result.meta.vintage == "796099"
-    assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
-    assert result.meta.request == {"release_id": 796099}
-    assert sent_urls(route) == [f"{API}/release/findById/796099"]
 
 
 AUGUST_2013 = [
@@ -937,12 +1074,9 @@ def august_2013_file(name: str) -> ReleaseFile:
     return ReleaseFile.from_url(f"{BASE_URL}/sites/default/release-files/{path}")
 
 
-def test_list_release_files_keeps_an_original_and_a_revised_file_in_upstream_order(
-    replay_fixture: ReplayFixture,
-) -> None:
-    route = replay_fixture("release_find_by_id", "95621")
-    result = tasks.list_release_files(95621)
-    assert result.data == [
+def test_release_files_keep_an_original_and_a_revised_file_in_upstream_order() -> None:
+    files = august_2013().release_files()
+    assert files == [
         ReleaseFile(
             url=f"{BASE_URL}/sites/default/release-files/{path}",
             name=path.rsplit("/", 1)[-1],
@@ -950,8 +1084,14 @@ def test_list_release_files_keeps_an_original_and_a_revised_file_in_upstream_ord
         )
         for path, kind in AUGUST_2013
     ]
-    xml = [file.name for file in result.data if file.format == "xml"]
+    xml = [file.name for file in files if file.format == "xml"]
     assert xml == ["ORIGwasde-08-12-2013.xml", "wasde-08-12-2013.xml"]
+
+
+def test_get_release_of_an_original_and_a_revised_file(replay_fixture: ReplayFixture) -> None:
+    route = replay_fixture("release_find_by_id", "95621")
+    result = tasks.get_release(95621)
+    assert result.data == august_2013()
     assert result.meta.vintage == "95621"
     assert result.meta.published_at == datetime(2013, 8, 12, 12, 0)
     assert result.meta.published_at_naive
@@ -1063,18 +1203,20 @@ type Download = Callable[[Path], Result[Downloaded]]
 """A call of the download, ``dest`` given."""
 
 DOWNLOADS: list[tuple[Download, dict[str, Any]]] = [
-    (lambda dest: tasks.download_release_file(796099, "txt", dest), {"format": "txt"}),
+    (lambda dest: tasks.download_release_file(796099, dest=dest, format="txt"), {"format": "txt"}),
     (
         lambda dest: tasks.download_release_file(796099, dest=dest, name="wasde1026.txt"),
         {"name": "wasde1026.txt"},
     ),
     (
-        lambda dest: tasks.download_release_file(796099, "txt", dest, name="wasde1026.txt"),
+        lambda dest: tasks.download_release_file(
+            796099, dest=dest, format="txt", name="wasde1026.txt"
+        ),
         {"format": "txt", "name": "wasde1026.txt"},
     ),
 ]
-"""The positional call ``(release_id, format, dest)``, ``name`` alone and both, each with
-what ``meta.request`` holds beside the release id and the URL."""
+"""The file chosen by ``format``, by ``name`` and by both, each with what ``meta.request``
+holds beside the release id and the URL."""
 
 
 @pytest.mark.parametrize(("download", "chosen_by"), DOWNLOADS, ids=["format", "name", "both"])
@@ -1113,7 +1255,7 @@ def test_download_release_file_refuses_a_format_the_release_lacks(
     replay_fixture("release_find_by_id", "796099")
     download = replay_fixture("download_release_file", "wasde1026_txt")
     with pytest.raises(InvalidRequestError) as caught:
-        tasks.download_release_file(796099, "zip", tmp_path / "wasde1026.zip")
+        tasks.download_release_file(796099, dest=tmp_path / "wasde1026.zip", format="zip")
     assert str(caught.value) == (
         "release 796099 has no 'zip' file; its formats: pdf, txt, xls, xml. The release was "
         "read by GET /api/v1/release/findById/796099, and no file was requested."
@@ -1131,7 +1273,8 @@ def test_download_release_file_refuses_neither_format_nor_name(
         tasks.download_release_file(796099, dest=tmp_path / "wasde1026.txt")
     assert str(caught.value) == (
         f"name the file of release 796099 to download: pass format, name or both. "
-        f"{NOTHING_SENT} list_release_files lists the release's files with their formats."
+        f"{NOTHING_SENT} get_release answers the release's files, and "
+        "Release.release_files() reads their names and formats."
     )
     assert sent_urls(release) == [], "refused before the release is looked up"
     assert sent_urls(download) == []
@@ -1141,27 +1284,25 @@ def test_download_release_file_refuses_neither_format_nor_name(
 @pytest.mark.parametrize(
     ("dest", "message"),
     [
-        (None, f"dest is required: name the file to write, e.g. 'wasde1026.txt'. {NOTHING_SENT}"),
         (".", f"dest is a directory; name the file to write. {NOTHING_SENT}"),
         (
             "missing/wasde1026.txt",
             f"dest's directory does not exist; create it first. {NOTHING_SENT}",
         ),
     ],
-    ids=["none", "a-directory", "a-missing-directory"],
+    ids=["a-directory", "a-missing-directory"],
 )
 def test_a_bad_dest_is_refused_before_any_request(
     replay_fixture: ReplayFixture,
     respx_mock: respx.MockRouter,
     tmp_path: Path,
-    dest: str | None,
+    dest: str,
     message: str,
 ) -> None:
     replay_fixture("release_find_by_id", "796099")
     replay_fixture("download_release_file", "wasde1026_txt")
-    target = None if dest is None else tmp_path / dest
     with pytest.raises(InvalidRequestError) as caught:
-        tasks.download_release_file(796099, "txt", target)
+        tasks.download_release_file(796099, dest=tmp_path / dest, format="txt")
     assert str(caught.value) == message
     assert caught.value.source == SOURCE
     assert respx_mock.calls.call_count == 0, "refused before the release is looked up"
@@ -1184,7 +1325,7 @@ async def test_a_bad_dest_is_refused_as_core_refuses_it(
     with pytest.raises(InvalidRequestError) as by_check:
         check_dest(tmp_path / dest, source=SOURCE)
     with pytest.raises(InvalidRequestError) as by_task:
-        await tasks.download_release_file_async(796099, "txt", tmp_path / dest)
+        await tasks.download_release_file_async(796099, dest=tmp_path / dest, format="txt")
     assert str(by_task.value) == str(by_core.value) == str(by_check.value)
     assert str(by_task.value).endswith(NOTHING_SENT)
     assert by_task.value.source == by_core.value.source == SOURCE
@@ -1204,7 +1345,7 @@ async def test_the_bulk_task_is_no_tool_and_no_route() -> None:
         served = name not in bulk
         assert (tool_name(SOURCE, fn) in tools) is served, name
         assert (f"/{SOURCE}/{name}" in routes) is served, name
-    assert len(tools) == len(routes) == 8
+    assert len(tools) == len(routes) == 7
 
 
 type McpCase = tuple[str, dict[str, Any], list[tuple[str, str]], list[str], Callable[..., bool]]
@@ -1276,17 +1417,8 @@ MCP_CASES: list[McpCase] = [
             and payload["meta"]["published_at"] == "2026-10-09T12:00:00"
             and payload["meta"]["published_at_naive"] is True
             and payload["meta"]["names"] == {"agency_acronym": WAOB}
-        ),
-    ),
-    (
-        "list_release_files",
-        {"release_id": 796099},
-        [("release_find_by_id", "796099")],
-        [f"{API}/release/findById/796099"],
-        lambda payload: (
-            [file["format"] for file in payload["data"]] == ["pdf", "txt", "xls", "xml"]
-            and payload["meta"]["published_at"] == "2026-10-09T12:00:00"
-            and payload["meta"]["published_at_naive"] is True
+            and [url.rsplit(".", 1)[-1] for url in payload["data"]["files"]]
+            == ["pdf", "txt", "xls", "xml"]
         ),
     ),
 ]

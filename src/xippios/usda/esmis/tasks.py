@@ -32,8 +32,9 @@ What every task follows:
   ``_client.classify`` as ``NotFoundError``; an unknown publication identifier answers
   HTTP 200 with nothing, which the single-record task ``get_publication`` raises as
   ``NotFoundError`` (conventions §5) and the list task ``list_releases`` returns as the
-  empty list with ``meta.total`` 0, as the pager says. An identifier carrying ``/`` is
-  refused by ESMIS's web server, raised as ``InvalidRequestError``.
+  empty list with ``meta.total`` 0, as the pager says, and a note that says so. An
+  identifier carrying ``/`` is refused by ESMIS's web server, raised as
+  ``InvalidRequestError``; every publication but 654 has another identifier without it.
 - Paging: pages are 0-based and hold 25 items. ``page`` given returns that page; omitted,
   core's ``fetch_pages`` walks them from page 0 under one bound, ``WALK_PAGES``, for
   Python and MCP alike, and refuses a walk that needs more pages, after its first request
@@ -43,9 +44,9 @@ What every task follows:
   older ``since`` before any request.
 - A refusal before the first request says that nothing was sent, and one after a request
   says what was sent (conventions §5; sdk-core ADR-0045, amendment 2026-11-24).
-- Release times: ``meta.vintage`` is the release id as printed (``"796099"``). The three
-  tasks about one release (``get_release``, ``list_release_files``,
-  ``download_release_file``) set ``meta.published_at`` to its ``release_datetime`` as
+- Release times: ``meta.vintage`` is the release id as printed (``"796099"``). The two
+  tasks about one release (``get_release`` and ``download_release_file``) set
+  ``meta.published_at`` to its ``release_datetime`` as
   printed with its ``+0000`` dropped, flagged ``published_at_naive`` (sdk-core ADR-0041): ESMIS
   prints ``+0000`` where its own calendar and the files' ``Last-Modified`` put the release
   at noon Eastern, so the time is upstream's text; no zone is attached and no time
@@ -97,7 +98,6 @@ __all__ = [
     "list_agencies",
     "list_publications",
     "list_recent_releases",
-    "list_release_files",
     "list_releases",
     "search_publications",
 ]
@@ -139,7 +139,7 @@ leaves its names out."""
 #   cuts after some 140 rows, before the 200-row cap: its note names since, until and page.
 # The three walking tools keep no paged cap: a continuation would walk upstream again once
 # the cache's 300 s have passed. Every other tool keeps the default and its note:
-# list_agencies answers 9 rows, and list_release_files at most 6 files as recorded.
+# list_agencies answers 9 rows, and get_release one release.
 MCP_CAPS: Mapping[str, ResultCap] = {
     "list_publications": ResultCap(
         note="filter with search (text of an id, an identifier or a title) or agency_acronym "
@@ -213,6 +213,12 @@ from there to 796099 (2026-10-09) in the eleven months after."""
 
 NOTHING_SENT = "Nothing was sent."
 """The sentence after the first of each refusal before a request (conventions §5)."""
+
+SEARCH_BY_KEYWORD = (
+    "search_publications (over MCP, the tool usda_esmis_search_publications) finds "
+    "identifiers by keyword"
+)
+"""How a refusal or a note on an unknown identifier names the task to call (conventions §8)."""
 
 type _Page[T] = tuple[Sequence[T], int | None]
 """One page for ``fetch_pages``: its items and upstream's count of the whole list."""
@@ -355,6 +361,19 @@ def _publication_id(publication: Publication) -> str:
     return publication.id
 
 
+def _no_release(publication_identifier: str) -> str:
+    """The note of ``list_releases`` where ESMIS counts no release for the identifier.
+
+    ESMIS answers an identifier it does not know with empty ``results`` and every pager
+    count 0 (``release_find_by_identifier/unknown.json``), so the empty list says why it is
+    empty: a date filter that keeps no release leaves upstream's count above 0.
+    """
+    return (
+        f"ESMIS counts no release for the identifier {publication_identifier!r}, as it answers "
+        f"an identifier it does not know; {SEARCH_BY_KEYWORD}."
+    )
+
+
 def _path(prefix: str, value: str) -> str:
     """A catalog path with ``value`` quoted whole, as the wrappers send it, for a message."""
     return f"/api/v1/{prefix}/{quote(value, safe='')}"
@@ -434,7 +453,7 @@ async def list_agencies_async() -> Result[list[Agency]]:
 
 @names_codes(agency_acronym=AGENCIES)
 async def list_publications_async(
-    search: str | None = None, agency_acronym: str | None = None
+    *, search: str | None = None, agency_acronym: str | None = None
 ) -> Result[list[PublicationRow]]:
     """Every ESMIS publication (report series) from the packaged table, filtered by text or agency.
 
@@ -480,7 +499,7 @@ async def list_publications_async(
 
 
 async def search_publications_async(
-    query: str, page: int | None = None
+    query: str, *, page: int | None = None
 ) -> Result[list[Publication]]:
     """Publications (report series) matching a keyword: find the identifier other tools take.
 
@@ -535,9 +554,10 @@ async def get_publication_async(publication_identifier: str) -> Result[Publicati
     One request (``esmis_api_publication_findByIdentifier``). An identifier ESMIS does not
     know raises ``NotFoundError``; upstream answers it with an empty result. Pass an
     identifier without ``/``: ESMIS's web server refuses one with it, raised as
-    ``InvalidRequestError``, and every publication recorded with such an identifier has
-    another without it (``"Market and Trade Economics Division/FDS"`` and ``"FDS"``).
-    ``upcoming_releases`` print Eastern offsets as upstream gives them.
+    ``InvalidRequestError``, and every publication but publication 654 has another without
+    it (``"FDS"`` beside ``"Market and Trade Economics Division/FDS"``). An identifier that
+    two publications share, as ``"AMS_1045"`` is, raises ``InvalidRequestError`` naming both
+    ids. ``upcoming_releases`` print Eastern offsets as upstream gives them.
 
     Args:
         publication_identifier: One of a publication's ``identifier`` values, as
@@ -549,8 +569,16 @@ async def get_publication_async(publication_identifier: str) -> Result[Publicati
         raise NotFoundError(
             f"ESMIS has no publication with the identifier {publication_identifier!r}: GET "
             f"{_path('publication/findByIdentifier', publication_identifier)} answered no "
-            "result; search_publications (over MCP, the tool usda_esmis_search_publications) "
-            "finds identifiers by keyword",
+            f"result; {SEARCH_BY_KEYWORD}",
+            source=SOURCE,
+        )
+    if len(answer.payload.results) > 1:
+        ids = [publication.id for publication in answer.payload.results]
+        raise InvalidRequestError(
+            f"ESMIS answered GET {_path('publication/findByIdentifier', publication_identifier)} "
+            f"with {len(ids)} publications, {', '.join(ids[:-1])} and {ids[-1]}, so the "
+            f"identifier names no one publication and none is returned; {SEARCH_BY_KEYWORD}, "
+            "and its answer holds each publication whole.",
             source=SOURCE,
         )
     request = {"publication_identifier": publication_identifier}
@@ -560,6 +588,7 @@ async def get_publication_async(publication_identifier: str) -> Result[Publicati
 
 async def list_releases_async(
     publication_identifier: str,
+    *,
     since: date | None = None,
     until: date | None = None,
     page: int | None = None,
@@ -575,12 +604,13 @@ async def list_releases_async(
     WASDE's 29 among them, is refused after its first request, naming ``page``. ``since``
     and ``until`` keep the releases whose printed date lies between them, both included,
     filtered by the package after the fetch. An identifier ESMIS does not know gives the
-    empty list with ``meta.total`` 0. ``meta.total`` is upstream's count of the
-    publication's releases before the date filter.
+    empty list with ``meta.total`` 0 and a note that says so. ``meta.total`` is upstream's
+    count of the publication's releases before the date filter.
 
     Args:
         publication_identifier: One of a publication's ``identifier`` values, e.g.
-            ``"wasde"``, ``"CropProg"``; pass one without ``/``.
+            ``"wasde"``, ``"CropProg"``; pass one without ``/``, which every publication
+            but publication 654 has.
         since: The earliest release date to keep, e.g. ``2026-01-01`` (a date); without
             ``page`` the walk stops by it. ``None`` (the default) keeps every one.
         until: The latest release date to keep, e.g. ``2026-06-30`` (a date); ``None``
@@ -618,11 +648,13 @@ async def list_releases_async(
             key=_release_id,
             source=SOURCE,
         )
-    meta = _meta(RELEASES, retrieved, request, total=total)
+    notes = [] if total != 0 else [_no_release(publication_identifier)]
+    meta = _meta(RELEASES, retrieved, request, total=total, notes=notes)
     return Result(data=_between(releases, since, until), meta=meta)
 
 
 async def list_recent_releases_async(
+    *,
     since: date | None = None,
     until: date | None = None,
     page: int | None = None,
@@ -707,63 +739,45 @@ async def list_recent_releases_async(
 
 
 async def get_release_async(release_id: int) -> Result[Release]:
-    """One release by its id: its publication's title, release time and file links.
+    """One release by its id: its publication's title, release time and each file's URL.
 
     One request (``esmis_api_release_findById``); an id ESMIS does not know raises
-    ``NotFoundError`` (HTTP 404). ``meta.vintage`` is the release id, e.g. ``"796099"``.
-    ``meta.published_at`` is the release's ``release_datetime`` as printed with its
-    ``+0000`` dropped, flagged ``published_at_naive``: ESMIS's own calendar puts the
-    release at noon Eastern while the API prints ``+0000``, so the time is upstream's
-    text, never converted. ``release_datetime`` keeps the time as printed.
+    ``NotFoundError`` (HTTP 404). ``files`` holds each file's URL in upstream order, its name
+    the URL's last segment (``"wasde1026.txt"``), its format the extension (``"pdf"``,
+    ``"txt"``, ``"xls"``, ``"xml"``, ``"zip"``), which ``Release.release_files()`` reads in
+    Python; a release can keep an original and a revised file of one format (release 95621).
+    The catalog states no size, and ``download_release_file`` fetches a file in Python alone.
+    ``meta.vintage`` is the release id, e.g. ``"796099"``. ``meta.published_at`` is the
+    release's ``release_datetime`` as printed with its ``+0000`` dropped, flagged
+    ``published_at_naive``: ESMIS's own calendar puts the release at noon Eastern while the
+    API prints ``+0000``, so the time is upstream's text, never converted.
 
     Args:
         release_id: A ``Release.id`` as a number, e.g. ``796099`` (the WASDE of
-            2026-10-09), as ``list_releases`` and ``list_recent_releases`` give them.
+            2026-10-09), ``95621`` (the WASDE of 2013-08-12), as ``list_releases`` and
+            ``list_recent_releases`` give them.
     """
     found = await _release(release_id)
     meta = _meta(RELEASE, [found.retrieved_at], {"release_id": release_id}, release=found.payload)
     return Result(data=found.payload, meta=meta)
 
 
-async def list_release_files_async(release_id: int) -> Result[list[ReleaseFile]]:
-    """The files of one release, each with its URL, name and format: pick one to download.
-
-    One request (``esmis_api_release_findById``): the release's ``files`` in upstream
-    order, each with its name as the URL prints it (``"wasde1026.txt"``) and its format,
-    the extension lowercased (``"pdf"``, ``"txt"``, ``"xls"``, ``"xml"``, ``"zip"``); a
-    release can keep an original and a revised file of one format
-    (``ORIGwasde-08-12-2013.xml`` before ``wasde-08-12-2013.xml`` in release 95621). The
-    catalog states no size. An id ESMIS does not know raises ``NotFoundError``.
-    ``download_release_file`` fetches a file in Python, by its format or its name; no MCP
-    tool downloads. ``meta.vintage`` is the release id, and ``meta.published_at`` its
-    ``release_datetime`` as printed with its ``+0000`` dropped, flagged
-    ``published_at_naive``, upstream's text, never converted.
-
-    Args:
-        release_id: A ``Release.id`` as a number, e.g. ``796099`` (the WASDE of
-            2026-10-09), ``95621`` (the WASDE of 2013-08-12).
-    """
-    found = await _release(release_id)
-    meta = _meta(RELEASE, [found.retrieved_at], {"release_id": release_id}, release=found.payload)
-    return Result(data=found.payload.release_files(), meta=meta)
-
-
 async def download_release_file_async(
     release_id: int,
-    format: str | None = None,
-    dest: str | PathLike[str] | None = None,
     *,
+    dest: str | PathLike[str],
+    format: str | None = None,
     name: str | None = None,
 ) -> Result[Downloaded]:
     """Download one file of a release to the path you name, e.g. the TXT of a WASDE.
 
     A bulk task, Python only: neither the MCP server nor the HTTP router serves it
-    (``BULK_TASKS``). ``dest`` is checked first by core's ``check_dest``: left ``None``, a
-    directory, or in a directory that does not exist, it raises ``InvalidRequestError``
-    before any request, and so does a call with neither ``format`` nor ``name``. Then two
-    requests, at most 8 attempts with the client's retries: the release
-    (``esmis_api_release_findById``), and the file chosen from its files as
-    ``list_release_files`` lists them, streamed to ``dest`` by core's ``download``, never
+    (``BULK_TASKS``). ``dest`` is checked first by core's ``check_dest``: a directory, or a
+    path in a directory that does not exist, raises ``InvalidRequestError`` before any
+    request, and so does a call with neither ``format`` nor ``name``. Then two requests, at
+    most 8 attempts with the client's retries: the release (``esmis_api_release_findById``),
+    and the file chosen from its files as ``Release.release_files()`` reads them, streamed
+    to ``dest`` by core's ``download``, never
     held in memory and never cached; nothing in it is read. ``name`` alone chooses the file
     with that name, ``format`` alone the first file of that format in upstream order, and
     both the named file, which must be of that format. A ``name`` the release lacks raises
@@ -782,30 +796,24 @@ async def download_release_file_async(
     Args:
         release_id: A ``Release.id`` as a number, e.g. ``796099`` (the WASDE of
             2026-10-09), ``95621`` (the WASDE of 2013-08-12).
-        format: The file's format as ``list_release_files`` gives it, the extension in
+        dest: The file to write, in a directory that exists, e.g. ``"wasde1026.txt"`` or
+            ``Path("reports") / "wasde1026.txt"``; a file there is replaced.
+        format: The file's format as ``Release.release_files()`` gives it, the extension in
             lower case, e.g. ``"txt"``, ``"xls"``, ``"xml"``, ``"pdf"``, ``"zip"``: the
             first file of that format. For release 95621, ``"xml"`` takes
             ``ORIGwasde-08-12-2013.xml``, the original, listed before the revised
             ``wasde-08-12-2013.xml``. ``None`` (the default) leaves the choice to ``name``.
-        dest: The file to write, in a directory that exists, e.g. ``"wasde1026.txt"`` or
-            ``Path("reports") / "wasde1026.txt"``; a file there is replaced. Required:
-            its default ``None`` only keeps ``format`` optional before it, and raises
-            ``InvalidRequestError``.
-        name: A file's name as ``list_release_files`` gives it, keyword only, e.g.
+        name: A file's name as ``Release.release_files()`` gives it, e.g.
             ``name="wasde-08-12-2013.xml"`` for release 95621, the revised XML, which
             ``format="xml"`` alone does not reach, or ``name="wasde1026.txt"`` for
             release 796099. ``None`` (the default) chooses by ``format``.
     """
-    if dest is None:
-        raise InvalidRequestError(
-            f"dest is required: name the file to write, e.g. 'wasde1026.txt'. {NOTHING_SENT}",
-            source=SOURCE,
-        )
     target = check_dest(dest, source=SOURCE)
     if format is None and name is None:
         raise InvalidRequestError(
             f"name the file of release {release_id} to download: pass format, name or both. "
-            f"{NOTHING_SENT} list_release_files lists the release's files with their formats.",
+            f"{NOTHING_SENT} get_release answers the release's files, and "
+            "Release.release_files() reads their names and formats.",
             source=SOURCE,
         )
     found = await _release(release_id)
@@ -823,6 +831,5 @@ get_release = sync(get_release_async)
 list_agencies = sync(list_agencies_async)
 list_publications = sync(list_publications_async)
 list_recent_releases = sync(list_recent_releases_async)
-list_release_files = sync(list_release_files_async)
 list_releases = sync(list_releases_async)
 search_publications = sync(search_publications_async)

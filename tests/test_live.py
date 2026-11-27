@@ -5,7 +5,7 @@
 Each task has a live smoke test, keyless, paced by the client at 30 requests a minute:
 ``list_agencies``, ``list_publications``, ``search_publications`` (one short page),
 ``get_publication``, ``list_releases`` (page 0), ``list_recent_releases`` (page 0, which
-also checks the id order its walk relies on), ``get_release``, ``list_release_files`` and
+also checks the id order its walk relies on), ``get_release`` (with its files' links) and
 ``download_release_file``; one more test checks the order of a publication's releases that
 ``list_releases`` relies on. Each checks the shape of what ESMIS answers today, never a
 value that changes with the next release. ``list_publications`` sends nothing: its test
@@ -50,7 +50,7 @@ NO_LIVE_LIST = {  # each packaged list not compared, with the reason
 WASDE = "wasde"
 OCTOBER_2026_WASDE = 796099
 """A WASDE release the catalog keeps, its id stable; its files are checked by shape and for a
-``.txt`` (``test_list_release_files_live``)."""
+``.txt`` (``test_get_release_live``)."""
 
 
 async def test_list_agencies_live() -> None:
@@ -132,15 +132,11 @@ async def test_get_release_live() -> None:
     assert result.meta.vintage == str(OCTOBER_2026_WASDE)
     assert result.meta.published_at == result.data.release_datetime.replace(tzinfo=None)
     assert result.meta.published_at_naive
-
-
-async def test_list_release_files_live() -> None:
-    result = await tasks.list_release_files_async(OCTOBER_2026_WASDE)
-    assert result.data
-    for file in result.data:
+    files = result.data.release_files()
+    for file in files:
         assert file.url.startswith(f"{BASE_URL}/")
         assert file.name.endswith(f".{file.format}")
-    assert "txt" in {file.format for file in result.data}
+    assert "txt" in {file.format for file in files}
 
 
 async def test_download_release_file_live(tmp_path: Path) -> None:
@@ -157,7 +153,9 @@ async def test_download_release_file_live(tmp_path: Path) -> None:
     formats = sorted({file.format for file in files})
     assert txt is not None, f"the latest WASDE release has no txt file; its formats: {formats}"
     dest = tmp_path / "wasde.txt"
-    result = await tasks.download_release_file_async(int(latest.id), "txt", dest, name=txt.name)
+    result = await tasks.download_release_file_async(
+        int(latest.id), dest=dest, format="txt", name=txt.name
+    )
     assert result.data.path == dest
     assert result.data.bytes == dest.stat().st_size > 0
     assert (result.data.content_type or "").startswith("text/")

@@ -37,6 +37,7 @@ from xippios.usda.esmis.models import (
     Pager,
     Publication,
     PublicationResults,
+    PublicationRow,
     Release,
     ReleaseResults,
     ResourceType,
@@ -341,41 +342,68 @@ async def test_publication_upcoming_releases(replay_fixture: ReplayFixture) -> N
     assert sent_urls(route) == [f"{API}/publication/findById/1863"]
 
 
-def yaml_enums(schema: str) -> dict[str, list[str]]:
-    """The ``enum`` lists of one schema's properties in the snapshot, as text."""
-    text = SNAPSHOT.read_text(encoding="utf-8").replace("\r\n", "\n")
-    lines = text.split("\n")
-    start = lines.index(f"    {schema}:")
-    found: dict[str, list[str]] = {}
-    prop = ""
-    for line in lines[start + 1 :]:
-        if re.fullmatch(r"    \S.*", line):
-            break
-        if match := re.fullmatch(r"        (\w+):", line):
-            prop = match.group(1)
-        elif match := re.fullmatch(r"            - (.+)", line):
-            if prop in found:
-                found[prop].append(match.group(1))
+def yaml_enums() -> dict[tuple[str, str], list[str]]:
+    """Every ``enum`` list of the snapshot, by its schema and its property, as text.
+
+    Read line by line, so that the document's unquoted ``Yes`` and ``No``, which a YAML 1.1
+    reader takes for booleans, stay the text that the wire sends. A schema is a line of four
+    spaces under ``schemas:``, a property one of eight, and an ``enum:`` of ten spaces opens
+    the list of its property. An ``enum`` in any other form, on an array's ``items`` or
+    written inline as ``enum: [a, b]``, opens no list here and fails the test's count of the
+    document's ``enum`` keys.
+    """
+    found: dict[tuple[str, str], list[str]] = {}
+    schema = prop = ""
+    listing: list[str] | None = None
+    for line in SNAPSHOT.read_text(encoding="utf-8").replace("\r\n", "\n").split("\n"):
+        if match := re.fullmatch(r"    (\w+):", line):
+            schema, listing = match.group(1), None
+        elif match := re.fullmatch(r"        (\w+):", line):
+            prop, listing = match.group(1), None
         elif line == "          enum:":
-            found[prop] = []
+            listing = found.setdefault((schema, prop), [])
+        elif listing is not None and (match := re.fullmatch(r"            - (.+)", line)):
+            listing.append(match.group(1))
+        elif not line.startswith("           "):
+            listing = None
     return found
 
 
-def test_publication_enumerations_follow_the_document() -> None:
-    """Three of the document's four enumerations are ``StrEnum`` with exactly its values;
-    ``frequency`` stays ``str``, since the wire printed a value it does not list."""
-    enums = yaml_enums("Publication")
-    assert sorted(enums) == ["frequency", "resource_type", "status", "subscribable"]
-    typed: dict[str, type[StrEnum]] = {
-        "status": Status,
-        "subscribable": Subscribable,
-        "resource_type": ResourceType,
-    }
-    for field, enum in typed.items():
-        assert [member.value for member in enum] == enums[field]
-        assert Publication.model_fields[field].annotation is enum
-    assert Publication.model_fields["frequency"].annotation is str
-    assert "" not in enums["frequency"]
+ENUMERATIONS: dict[str, type[StrEnum] | None] = {
+    "frequency": None,
+    "status": Status,
+    "subscribable": Subscribable,
+    "resource_type": ResourceType,
+}
+"""Each ``enum`` of the document, on ``Publication`` alone, with the enumeration that
+``models.py`` writes by hand for it, or ``None`` where the field stays ``str``: the wire
+printed ``""`` for ``frequency`` on publication 1172, a value the document does not list."""
+
+
+def test_the_enumerations_written_by_hand_follow_the_document() -> None:
+    """Each enumeration that ``models.py`` writes by hand holds exactly the values of its
+    ``enum`` in the snapshot, in the document's order, and no ``enum`` of the document is
+    left unread (sdk-core ADR-0061, decision 12; conventions §10).
+
+    A refresh of ``docs/upstream/`` that adds a value, drops one or declares an ``enum`` on
+    another field or schema fails here until ``models.py`` follows it or this table names
+    why a field stays ``str``.
+    """
+    enums = yaml_enums()
+    keys = re.findall(r"\benum\b[\"']?\s*:", SNAPSHOT.read_text(encoding="utf-8"))
+    assert len(keys) == len(enums), "an enum on an array's items or in flow form is unread"
+    assert sorted(enums) == sorted(("Publication", field) for field in ENUMERATIONS)
+    for field, enum in ENUMERATIONS.items():
+        documented = enums["Publication", field]
+        assert documented, field
+        if enum is None:
+            assert Publication.model_fields[field].annotation is str, field
+            continue
+        assert [member.value for member in enum] == documented, field
+        assert Publication.model_fields[field].annotation is enum, field
+        if field in PublicationRow.model_fields:
+            assert PublicationRow.model_fields[field].annotation is enum, field
+    assert "" not in enums["Publication", "frequency"]
 
 
 async def test_publication_find_by_id_unknown(replay_fixture: ReplayFixture) -> None:
@@ -509,9 +537,11 @@ async def test_publication_find_by_identifier_with_a_slash(replay_fixture: Repla
         "ESMIS's web server refused GET /api/v1/publication/findByIdentifier/"
         "Market%20and%20Trade%20Economics%20Division%2FFDS with HTTP 404: it does not "
         "accept an encoded slash (%2F) in a path, so a value carrying '/' cannot be looked "
-        "up. Pass one without '/'; a publication can also be found by another of its "
-        "identifiers or by its id."
+        "up. Pass another of the publication's identifiers, as list_publications (over MCP, "
+        "the tool usda_esmis_list_publications) lists them: every publication but 654 has one "
+        "without '/'."
     )
+    assert "by its id" not in str(info.value), "no lookup that no task has"
     assert "esmis.nal.usda.gov" not in str(info.value)
     fixture = load_fixture(FIXTURES / "publication_find_by_identifier" / "with_slash.json")
     assert fixture.response.status == 404

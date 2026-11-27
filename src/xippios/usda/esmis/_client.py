@@ -101,8 +101,9 @@ def classify(response: httpx.Response) -> XippiosError | None:
       is no route either: probed on 2026-10-27, Drupal answered its HTML "Page not
       found", which falls under the next rule; the wrappers never send one. So an
       identifier carrying ``/`` (``"Market and Trade Economics Division/FDS"``) cannot
-      be looked up; the publications recorded with one carry another without ``/``
-      (``"FDS"``).
+      be looked up. Of the 71 publications of the packaged table with such an identifier,
+      70 carry another without ``/`` (``"FDS"``), and publication 654 has none; the
+      refusal names ``list_publications``, which lists them.
     - Any other 404 under ``/api/v1/`` is ``NotFoundError``: every lookup by id answers an
       unknown id with HTTP 404 ``{"message": ""}``, as recorded for
       ``esmis_api_agency_findById``, ``esmis_api_publication_findById``,
@@ -126,8 +127,9 @@ def classify(response: httpx.Response) -> XippiosError | None:
         return InvalidRequestError(
             f"ESMIS's web server refused {request.method} {_sent_path(request)} with HTTP "
             "404: it does not accept an encoded slash (%2F) in a path, so a value carrying "
-            "'/' cannot be looked up. Pass one without '/'; a publication can also be found "
-            "by another of its identifiers or by its id.",
+            "'/' cannot be looked up. Pass another of the publication's identifiers, as "
+            "list_publications (over MCP, the tool usda_esmis_list_publications) lists them: "
+            "every publication but 654 has one without '/'.",
             source=SOURCE,
         )
     message = _upstream_message(response)

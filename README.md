@@ -23,25 +23,29 @@ No API key is needed.
 ```python
 from pathlib import Path
 
-from xippios.usda.esmis import download_release_file, list_release_files, list_releases
+from xippios.usda.esmis import download_release_file, get_release, list_releases
 
 latest = list_releases("wasde", page=0).data[0]  # newest first: the latest WASDE release
 latest.id, latest.release_datetime  # "796099", 2026-10-09 12:00:00+00:00, as printed
 
-files = list_release_files(int(latest.id))
-[file.format for file in files.data]  # ["pdf", "txt", "xls", "xml"]
-files.meta.vintage  # "796099": the release id
-files.meta.published_at  # 2026-10-09 12:00:00, the printed time without its +0000
-files.meta.published_at_naive  # True: upstream's text, no zone attached (sdk-core ADR-0041)
-files.meta.names  # {"agency_acronym": {"WAOB": "World Agricultural Outlook Board"}}
+release = get_release(int(latest.id))  # with each file's URL
+[file.format for file in release.data.release_files()]  # ["pdf", "txt", "xls", "xml"]
+release.meta.vintage  # "796099": the release id
+release.meta.published_at  # 2026-10-09 12:00:00, the printed time without its +0000
+release.meta.published_at_naive  # True: upstream's text, no zone attached (sdk-core ADR-0041)
+release.meta.names  # {"agency_acronym": {"WAOB": "World Agricultural Outlook Board"}}
 
 # Python only, no MCP tool: streams the TXT to the path you name; nothing is cached
-txt = download_release_file(796099, "txt", Path("wasde1026.txt"))
+txt = download_release_file(796099, dest=Path("wasde1026.txt"), format="txt")
 txt.data.path, txt.data.bytes, txt.data.content_type  # wasde1026.txt, 122378, "text/plain"
 txt.meta.endpoint  # "wasde1026.txt": the file's name as upstream prints it
 ```
 
-`search_publications("wasde")` finds a publication's identifiers, and
+What identifies a record, a publication's identifier or a release's id, is passed by
+position, and every other argument by name: `since`, `until` and `page` of the release
+lists, `page` of `search_publications`, `search` and `agency_acronym` of
+`list_publications`, and `dest`, `format` and `name` of `download_release_file`, whose
+`dest` is required. `search_publications("wasde")` finds a publication's identifiers, and
 `list_releases("wasde", since=date(2026, 1, 1))` its releases since a date, newest first.
 `list_recent_releases(since=date(2026, 10, 20))` lists what USDA released across every
 publication since a date, latest catalogued first. A walk of pages sends at most 24
@@ -106,14 +110,13 @@ exactly tasks.__all__, and tasks_write.__all__ where the package has write tasks
 | Upstream operation | Task function | MCP tool | Status |
 | --- | --- | --- | --- |
 | `esmis_api_agency_findAll` | `list_agencies()` | `usda_esmis_list_agencies` | alpha |
-| `esmis_api_publication_findAll`, every page, packaged (fetched 2026-10-27; no request) | `list_publications(search=None, agency_acronym=None)` | `usda_esmis_list_publications` | alpha |
-| `esmis_api_publication_search`, every page, at most 24, unless `page` is given | `search_publications(query, page=None)` | `usda_esmis_search_publications` | alpha |
+| `esmis_api_publication_findAll`, every page, packaged (fetched 2026-10-27; no request) | `list_publications(*, search=None, agency_acronym=None)` | `usda_esmis_list_publications` | alpha |
+| `esmis_api_publication_search`, every page, at most 24, unless `page` is given | `search_publications(query, *, page=None)` | `usda_esmis_search_publications` | alpha |
 | `esmis_api_publication_findByIdentifier` | `get_publication(publication_identifier)` | `usda_esmis_get_publication` | alpha |
-| `esmis_api_release_findByIdentifier`, pages walked newest first, at most 24, unless `page` is given | `list_releases(publication_identifier, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |
-| `esmis_api_release_findAll`, every publication's releases, pages walked from 0 down to `since` (to the first page whose newest release is dated more than 14 days before it), at most 24, unless `page` is given | `list_recent_releases(since=None, until=None, page=None)`, refused past 24 pages, so without `since`, and for a walk from a `since` before 2025-09-12 | `usda_esmis_list_recent_releases` | alpha |
-| `esmis_api_release_findById` | `get_release(release_id)` | `usda_esmis_get_release` | alpha |
-| `esmis_api_release_findById` | `list_release_files(release_id)` | `usda_esmis_list_release_files` | alpha |
-| `esmis_api_release_findById`, then the file | `download_release_file(release_id, format=None, dest=None, *, name=None)`, a bulk task: `dest` required, the file chosen by `format`, `name` or both | none, Python only | alpha |
+| `esmis_api_release_findByIdentifier`, pages walked newest first, at most 24, unless `page` is given | `list_releases(publication_identifier, *, since=None, until=None, page=None)` | `usda_esmis_list_releases` | alpha |
+| `esmis_api_release_findAll`, every publication's releases, pages walked from 0 down to `since` (to the first page whose newest release is dated more than 14 days before it), at most 24, unless `page` is given | `list_recent_releases(*, since=None, until=None, page=None)`, refused past 24 pages, so without `since`, and for a walk from a `since` before 2025-09-12 | `usda_esmis_list_recent_releases` | alpha |
+| `esmis_api_release_findById` | `get_release(release_id)`, each file's URL in its answer, `Release.release_files()` their names and formats | `usda_esmis_get_release` | alpha |
+| `esmis_api_release_findById`, then the file | `download_release_file(release_id, *, dest, format=None, name=None)`, a bulk task: `dest` required, the file chosen by `format`, `name` or both | none, Python only | alpha |
 
 ## Upstream terms and attribution
 
