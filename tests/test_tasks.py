@@ -9,14 +9,18 @@ built (conventions §10).
 ``list_publications`` answers from the packaged tables in ``reference/`` and sends
 nothing: its tests mount no fixture and check that no request left. Four answers
 were recorded for the tasks: WASDE's release page 1 (``release_find_by_identifier/
-wasde_page1.json``), which the walk of ``list_releases`` crosses into, the October
+wasde_page1.json``), whose ids from before ESMIS's migration do not follow the dates, the October
 2026 WASDE ``.txt`` (``download_release_file/wasde1026_txt.json``), the exchange the
 download replays, and, on 2026-10-28, the WASDE of 2013-08-12
 (``release_find_by_id/95621.json``), whose original and revised files of one format the
 download's choice by ``format`` and ``name`` is tested on, without a download, and page 1
 of every release (``release_find_all/page1.json``), which the walk of
-``list_recent_releases`` crosses into. The download is checked by path, size and content
-type, never by what the file says (sdk-core ADR-0020).
+``list_recent_releases`` crosses into. WASDE's release pages 0 to 7 of 2026-11-27
+(``release_find_by_identifier/wasde_2026_11_27_page0.json`` to ``_page7.json``), read once
+each by a probe of the whole list and written as served by core's writer, are the pages the
+walks of ``list_releases`` from ``since`` cross, the two that hold older releases out of
+place among them. The download is checked by path, size and content type, never by what
+the file says (sdk-core ADR-0020).
 """
 
 import importlib
@@ -26,6 +30,7 @@ import re
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from importlib import resources
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +60,7 @@ from xippios.core.testing import (
     load_fixture,
     mcp_call,
     mcp_call_text,
+    recorded_query,
     sent_urls,
 )
 
@@ -118,6 +124,10 @@ def recorded[T](type_: type[T], endpoint: str, case: str) -> T:
 
 def releases_of(case: str) -> list[Release]:
     return recorded(ReleaseResults, "release_find_by_identifier", case).results
+
+
+NOVEMBER = [f"wasde_2026_11_27_page{page}" for page in range(8)]
+"""WASDE's release pages 0 to 7 as ESMIS served them on 2026-11-27, of 704 releases on 29."""
 
 
 def recent_of(case: str) -> list[Release]:
@@ -601,29 +611,120 @@ def test_list_releases_one_page(replay_fixture: ReplayFixture) -> None:
     assert sent_urls(route) == [f"{WASDE_RELEASES}?page=0"]
 
 
-def test_list_releases_walks_until_a_page_is_older_than_since(
+def test_list_releases_walks_to_the_first_page_whose_newest_release_is_before_since(
     replay_fixture: ReplayFixture,
 ) -> None:
-    first = replay_fixture("release_find_by_identifier", "wasde_page0", match_params=["page"])
-    second = replay_fixture("release_find_by_identifier", "wasde_page1", match_params=["page"])
+    routes = [
+        replay_fixture("release_find_by_identifier", case, match_params=["page"])
+        for case in NOVEMBER[:3]
+    ]
     since = date(2024, 1, 1)
     result = tasks.list_releases("wasde", since=since)
-    walked = releases_of("wasde_page0") + releases_of("wasde_page1")
+    walked = [release for case in NOVEMBER[:3] for release in releases_of(case)]
     assert result.data == [release for release in walked if printed_date(release) >= since]
-    assert len(result.data) == 33
-    assert (result.data[0].id, result.data[-1].id) == ("796099", "95494")
+    assert len(result.data) == 34
+    assert (result.data[0].id, result.data[-1].id) == ("796142", "95494")
     assert printed_date(result.data[-1]) == date(2024, 1, 12)
     assert result.meta.request == {"publication_identifier": "wasde", "since": since}
-    assert result.meta.total == 703, "may exceed len(data) after the date filter"
-    # Page 1's oldest release (2022-08-12) is before since: the walk ends there.
-    assert sent_urls(first) == [f"{WASDE_RELEASES}?page=0"]
-    assert sent_urls(second) == [f"{WASDE_RELEASES}?page=1"]
+    assert result.meta.total == 704, "may exceed len(data) after the date filter"
+    # Page 1's oldest release (2022-09-12) is before since, its newest (2024-09-12) is not:
+    # the walk goes on. Page 2's newest (2022-08-12) is before since: the walk ends there,
+    # one page past the last release it keeps, with no request for page 3.
+    assert [sent_urls(route) for route in routes] == [
+        [f"{WASDE_RELEASES}?page={page}"] for page in range(3)
+    ]
+
+
+def test_a_walk_from_since_reaches_the_releases_past_the_pages_out_of_place(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """WASDE's pages 3 and 4 hold older releases out of place, so their oldest are dated
+    before 2015-10-01 while pages 4 to 6 still list releases from then on, the October 2015
+    WASDE on page 6 (https://github.com/xippios/sdk-usda-esmis/issues/67). The walk ends at
+    page 7, the first whose newest release (2014-02-10) is dated before ``since``."""
+    routes = [
+        replay_fixture("release_find_by_identifier", case, match_params=["page"])
+        for case in NOVEMBER
+    ]
+    since = date(2015, 10, 1)
+    result = tasks.list_releases("wasde", since=since)
+    walked = [release for case in NOVEMBER for release in releases_of(case)]
+    assert result.data == [release for release in walked if printed_date(release) >= since]
+    assert len(result.data) == 135
+    october = [release for release in result.data if printed_date(release) < date(2015, 11, 1)]
+    assert [(release.id, printed_date(release)) for release in october] == [
+        ("95595", date(2015, 10, 9))
+    ]
+    assert result.meta.total == 704
+    assert [sent_urls(route) for route in routes] == [
+        [f"{WASDE_RELEASES}?page={page}"] for page in range(8)
+    ]
+
+
+def test_a_walk_from_since_is_refused_where_24_pages_do_not_end_it(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """A walk from ``since`` runs its stop rule, so core refuses it at the bound, not before.
+
+    NOT RECORDED at pages 8 to 23: page 7 of 2026-11-27 replayed at its own path for the
+    other pages, where its newest release, dated 2014-02-10, never ends a walk from
+    1982-02-11, a test that asserts what was sent and the refusal (conventions §10, kind 3).
+    On the list as ESMIS served it that day, page 23's newest release is dated 1982-02-11,
+    so such a walk needs a 25th page.
+    """
+    routes = [
+        replay_fixture("release_find_by_identifier", case, match_params=["page"])
+        for case in NOVEMBER[:7]
+    ]
+    rest = replay_fixture("release_find_by_identifier", NOVEMBER[7])
+    with pytest.raises(InvalidRequestError) as caught:
+        tasks.list_releases("wasde", since=date(1982, 2, 11))
+    assert str(caught.value) == (
+        "the walk needs more than the 24 pages that one call fetches: upstream counts 704 "
+        "records on 29 pages of 25, and the walk reached page 24 of 29 after 24 requests. It "
+        "returns nothing; pass page to fetch one page at a time."
+    )
+    assert caught.value.source == SOURCE
+    assert [url for route in routes for url in sent_urls(route)] + sent_urls(rest) == [
+        f"{WASDE_RELEASES}?page={page}" for page in range(24)
+    ]
+
+
+def test_no_recorded_page_lists_a_release_after_the_newest_of_a_page_before_it() -> None:
+    """The order the walk of ``list_releases`` from ``since`` relies on, on the pages recorded.
+
+    Each page's newest release is dated before the newest of the page before it, while pages
+    3 and 4 are out of date order: 95866 of 1995-01-31 stands on page 3 among releases of
+    2019, and page 4 opens with eighteen of 2002 to 2006 (``docs/upstream/OBSERVED.md``, "A
+    publication's releases come newest first page by page").
+    """
+    pages = [[printed_date(release) for release in releases_of(case)] for case in NOVEMBER]
+    newest = [max(dates) for dates in pages]
+    assert all(later < earlier for earlier, later in pairwise(newest))
+    in_order = [dates == sorted(dates, reverse=True) for dates in pages]
+    assert in_order == [True, True, True, False, False, True, True, True]
+    assert date(1995, 1, 31) in pages[3]
+    assert {day.year for day in pages[4][:18]} <= set(range(2002, 2007))
+    assert {day.year for day in pages[4][18:]} == {2018}
+
+
+def test_the_description_of_list_releases_names_its_rule_and_the_dates_it_cannot_walk() -> None:
+    """The tool's description says where a walk from ``since`` ends, and the text of ``since``
+    which WASDE dates the bound leaves to ``page``, as the probe of 2026-11-27 counted them."""
+    description, arguments = (tasks.list_releases.__doc__ or "").split("Args:")
+    flat = " ".join(description.split())
+    assert "the first page whose newest release is dated before it" in flat
+    assert "newest first" not in flat.split(".")[0], "the summary claims no order of the list"
+    since = " ".join(arguments.split("since:")[1].split("until:")[0].split())
+    assert "one page past the last release it keeps" in since
+    assert "for a ``since`` before 1982-02-12" in since
 
 
 def test_list_releases_keeps_the_printed_dates_between_since_and_until(
     replay_fixture: ReplayFixture,
 ) -> None:
     route = replay_fixture("release_find_by_identifier", "wasde_page0", match_params=["page"])
+    second = replay_fixture("release_find_by_identifier", "wasde_page1", match_params=["page"])
     since, until = date(2025, 1, 1), date(2025, 12, 31)
     result = tasks.list_releases("wasde", since=since, until=until)
     assert [release.id for release in result.data] == [
@@ -638,8 +739,10 @@ def test_list_releases_keeps_the_printed_dates_between_since_and_until(
         "since": since,
         "until": until,
     }
-    # Page 0's oldest release (2024-09-12) is before since: one request.
+    # Page 0's newest release (2026-10-09) is not before since, page 1's (2024-08-12) is:
+    # two requests, and until ends nothing of the walk.
     assert sent_urls(route) == [f"{WASDE_RELEASES}?page=0"]
+    assert sent_urls(second) == [f"{WASDE_RELEASES}?page=1"]
 
 
 def test_list_releases_without_since_or_page_is_refused_past_the_bound(
@@ -660,7 +763,8 @@ def test_list_releases_without_since_or_page_is_refused_past_the_bound(
 
 
 def test_the_latest_release_is_the_first_row_of_page_zero(replay_fixture: ReplayFixture) -> None:
-    """A publication lists its releases latest ``release_datetime`` first, as observed."""
+    """Page 0 of a publication's releases runs latest ``release_datetime`` first, and no later
+    page lists a release dated after its newest, as observed."""
     replay_fixture("release_find_by_identifier", "wasde_page0", match_params=["page"])
     result = tasks.list_releases("wasde", page=0)
     assert result.data[0] == max(result.data, key=lambda release: release.release_datetime)
@@ -763,7 +867,7 @@ def test_list_recent_releases_walks_until_a_page_is_newest_more_than_14_days_bef
         "days before since (2026-10-24); a release catalogued on a later page is not listed, "
         "and page reads it."
     ]
-    # Page 0's oldest release (2026-09-28) is before since, where list_releases's rule
+    # Page 0's oldest release (2026-09-28) is before since, where a rule on a page's oldest
     # would stop; its newest (2026-10-26) is not 14 days before since, so the walk goes on.
     # Page 1's newest (2026-10-09) is 15 days before since: the walk ends there, with no
     # request for page 2, which no route answers and the plugin refuses.
@@ -809,10 +913,25 @@ def test_the_stop_rule_needs_a_page_newest_more_than_14_days_before_since(
 ) -> None:
     """Page 0's newest release is dated 2026-10-26, page 1's 2026-10-09.
 
-    14 days before ``since`` walks on, 15 ends the walk; page 0's release of 2026-09-28,
-    before 2026-10-10, ends nothing.
+    ``list_recent_releases`` ends its walk 14 days before ``since``: 14 days walks on, 15
+    ends the walk; page 0's release of 2026-09-28, before 2026-10-10, ends nothing.
     """
-    assert tasks._newest_before(since)(recent_of(case)) is last
+    rule = tasks._newest_before(since - tasks.ORDER_TOLERANCE)
+    assert rule(recent_of(case)) is last
+    assert rule([]) is False, "an empty page ends the walk anyway"
+
+
+@pytest.mark.parametrize(
+    ("since", "last"),
+    [(date(2020, 7, 11), True), (date(2020, 7, 10), False), (date(1995, 2, 1), False)],
+)
+def test_the_stop_rule_of_list_releases_reads_a_page_s_newest_release(
+    since: date, last: bool
+) -> None:
+    """WASDE's page 3 of 2026-11-27 runs 2020-07-10 back to 2018-12-11 with three older
+    releases out of place, 95866 of 1995-01-31 among them: its newest ends a walk from a
+    later ``since``, and its oldest ends none."""
+    assert tasks._newest_before(since)(releases_of(NOVEMBER[3])) is last
     assert tasks._newest_before(since)([]) is False, "an empty page ends the walk anyway"
 
 
@@ -902,7 +1021,7 @@ def test_list_recent_releases_refuses_before_any_request(
     if message.endswith("is before 2025-09-12"):
         assert (
             "Use list_releases (over MCP, the tool usda_esmis_list_releases) for one "
-            "publication's releases in release order"
+            "publication's older releases, pass page"
         ) in text, "names the task and its tool (conventions §8)"
         assert "pass page to read older pages" in text
     assert respx_mock.calls.call_count == 0, "refused before any request"
@@ -1368,6 +1487,13 @@ async def test_the_bulk_task_is_no_tool_and_no_route() -> None:
 type McpCase = tuple[str, dict[str, Any], list[tuple[str, str]], list[str], Callable[..., bool]]
 """A tool's task name, its arguments, the fixtures it needs, the URLs it sends, a check."""
 
+
+def recorded_params(endpoint: str, case: str) -> list[str]:
+    """The query parameters a recording was made with, which its replay then requires, so
+    that each recorded page answers its own page alone."""
+    return list(recorded_query(load_fixture(FIXTURES / endpoint / f"{case}.json")))
+
+
 MCP_CASES: list[McpCase] = [
     (
         "list_agencies",
@@ -1404,8 +1530,11 @@ MCP_CASES: list[McpCase] = [
     (
         "list_releases",
         {"publication_identifier": "wasde", "since": "2025-01-01"},
-        [("release_find_by_identifier", "wasde_page0")],
-        [f"{WASDE_RELEASES}?page=0"],
+        [
+            ("release_find_by_identifier", "wasde_page0"),
+            ("release_find_by_identifier", "wasde_page1"),
+        ],
+        [f"{WASDE_RELEASES}?page=0", f"{WASDE_RELEASES}?page=1"],
         lambda payload: (
             len(payload["data"]) == 21
             and payload["meta"]["request"]
@@ -1455,7 +1584,10 @@ async def test_every_tool_end_to_end(
     urls: list[str],
     check: Callable[[Any], bool],
 ) -> None:
-    routes = [replay_fixture(endpoint, case) for endpoint, case in fixtures]
+    routes = [
+        replay_fixture(endpoint, case, match_params=recorded_params(endpoint, case))
+        for endpoint, case in fixtures
+    ]
     payload = await mcp_call(server, f"usda_esmis_{task}", arguments)
     assert payload["meta"]["source"] == SOURCE
     assert check(payload), payload["meta"]

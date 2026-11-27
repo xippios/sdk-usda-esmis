@@ -6,8 +6,11 @@ Each task has a live smoke test, keyless, paced by the client at 30 requests a m
 ``list_agencies``, ``list_publications``, ``search_publications`` (one short page),
 ``get_publication``, ``list_releases`` (page 0), ``list_recent_releases`` (page 0, which
 also checks the id order its walk relies on), ``get_release`` (with its files' links) and
-``download_release_file``; one more test checks the order of a publication's releases that
-``list_releases`` relies on. Each checks the shape of what ESMIS answers today, never a
+``download_release_file``; one more test checks that page 0 of a publication's releases
+runs newest first, so its first row is the latest release. The order across pages, by
+which ``list_releases`` ends a walk from ``since``, is held offline on the recorded pages
+and checked by no live test, since it takes four more requests a night (pages 1 to 4 of
+WASDE). Each checks the shape of what ESMIS answers today, never a
 value that changes with the next release. ``list_publications`` sends nothing: its test
 compares the packaged table's size with upstream's count today, read from page 0 of
 ``esmis_api_publication_findAll``. The download fetches the current WASDE ``.txt`` alone,
@@ -103,10 +106,12 @@ async def test_list_releases_live() -> None:
 
 
 async def test_page_zero_of_a_publication_is_newest_first() -> None:
-    """The order ``list_releases`` relies on, observed only: its row 0 is the latest release.
+    """The order of page 0, observed only: its row 0 is the latest release.
 
     Page 0 of a publication's releases runs latest ``release_datetime`` first; the
-    order is not documented, so it is checked here, never a date or an id.
+    order is not documented, so it is checked here, never a date or an id. The order across
+    pages, which a walk from ``since`` relies on, is held offline
+    (``test_no_recorded_page_lists_a_release_after_the_newest_of_a_page_before_it``).
     """
     answer = await api.release_find_by_identifier(WASDE, 0)
     times = [release.release_datetime for release in answer.payload.results]
