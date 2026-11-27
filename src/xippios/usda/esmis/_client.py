@@ -126,7 +126,7 @@ def classify(response: httpx.Response) -> XippiosError | None:
         return None
     if _slash_refused(response):
         return InvalidRequestError(
-            f"ESMIS's web server refused {request.method} {_sent_path(request)} with HTTP "
+            f"ESMIS's web server refused {request_description(response)} with HTTP "
             "404: it does not accept an encoded slash (%2F) in a path, so a value carrying "
             "'/' cannot be looked up. Pass another of the publication's identifiers, as "
             "list_publications (over MCP, the tool usda_esmis_list_publications) lists them: "

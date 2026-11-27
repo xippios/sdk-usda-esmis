@@ -73,7 +73,6 @@ from xippios.core import (
     Result,
     ResultCap,
     ResultMeta,
-    ValidationError,
     check_dest,
     fetch_pages,
     matches,
@@ -267,15 +266,15 @@ def _page[T](pager: Pager | tuple[()], items: list[T], number: int, sent: str) -
     (https://github.com/xippios/sdk-usda-esmis/issues/27).
 
     Raises:
-        ValidationError: The pager states another page size; the refusal names the request
-            that was sent and returns nothing.
+        InvalidRequestError: The pager states another page size, a refusal from an answer
+            that parses (conventions §5); it names the request that was sent, returns
+            nothing and names ``page``.
     """
     if isinstance(pager, Pager) and pager.items_per_page != PAGE_SIZE:
-        raise ValidationError(
+        raise InvalidRequestError(
             f"ESMIS answered page {number} of {sent} in pages of {pager.items_per_page} "
             f"items, where the walk counts {PAGE_SIZE}: the walk would skip or repeat items, "
             "so it returns nothing; pass page to read one page as upstream pages it.",
-            raw=pager.model_dump(mode="json"),
             source=SOURCE,
         )
     return items, _total(pager)
