@@ -695,11 +695,12 @@ def test_a_walk_from_since_is_refused_where_24_pages_do_not_end_it(
 ) -> None:
     """A walk from ``since`` runs its stop rule, so core refuses it at the bound, not before.
 
-    NOT RECORDED at pages 8 to 23: page 7 of 2026-11-27 replayed at its own path for the
-    other pages, where its newest release, dated 2014-02-10, never ends a walk from
-    1982-02-11, a test that asserts what was sent and the refusal (conventions §10, kind 3).
-    On the list as ESMIS served it that day, page 23's newest release is dated 1982-02-11,
-    so such a walk needs a 25th page.
+    NOT RECORDED at pages 8 to 23: ``release_find_by_identifier/wasde_2026_11_27_page7.json``
+    replayed at its own path for the other pages, where its newest release, dated 2014-02-10,
+    never ends a walk from 1982-02-11, a test that asserts what was sent and the refusal
+    (conventions §10, kind 3). On WASDE's whole list page 23's newest release is dated
+    1982-02-11, so such a walk needs a 25th page (``docs/upstream/OBSERVED.md``, "A
+    publication's releases come newest first page by page").
     """
     routes = [
         replay_fixture("release_find_by_identifier", case, match_params=["page"])
@@ -739,7 +740,8 @@ def test_no_recorded_page_lists_a_release_after_the_newest_of_a_page_before_it()
 
 def test_the_description_of_list_releases_names_its_rule_and_the_dates_it_cannot_walk() -> None:
     """The tool's description says where a walk from ``since`` ends, and the text of ``since``
-    which WASDE dates the bound leaves to ``page``, as the probe of 2026-11-27 counted them."""
+    which WASDE dates the bound leaves to ``page``, as ``docs/upstream/OBSERVED.md`` counts
+    them under "A publication's releases come newest first page by page"."""
     description, arguments = (tasks.list_releases.__doc__ or "").split("Args:")
     flat = " ".join(description.split())
     assert "the first page whose newest release is dated before it" in flat
@@ -874,11 +876,11 @@ def test_list_recent_releases_walks_until_a_page_is_newest_more_than_14_days_bef
 ) -> None:
     """The walk goes on past a page whose oldest release is before ``since``.
 
-    The two pages were recorded a day apart, page 0 on 2026-10-27 and page 1 on
-    2026-10-28: three releases catalogued in between moved 796100, 796099 and 796098 from
-    the end of page 0 to the head of page 1, so both pages list them. ``since`` lies after
-    their dates (2026-10-09 and 2026-09-28), so the filter drops them, as it drops every
-    release of page 1.
+    The two pages were recorded a day apart, ``release_find_all/page0.json`` on 2026-10-27
+    and ``page1.json`` on 2026-10-28: three releases catalogued in between moved 796100,
+    796099 and 796098 from the end of page 0 to the head of page 1, so both pages list them.
+    ``since`` lies after their dates (2026-10-09 and 2026-09-28), so the filter drops them,
+    as it drops every release of page 1.
     """
     first = replay_fixture("release_find_all", "page0", match_params=["page"])
     second = replay_fixture("release_find_all", "page1", match_params=["page"])
@@ -957,9 +959,9 @@ def test_the_stop_rule_needs_a_page_newest_more_than_14_days_before_since(
 def test_the_stop_rule_of_list_releases_reads_a_page_s_newest_release(
     since: date, last: bool
 ) -> None:
-    """WASDE's page 3 of 2026-11-27 runs 2020-07-10 back to 2018-12-11 with three older
-    releases out of place, 95866 of 1995-01-31 among them: its newest ends a walk from a
-    later ``since``, and its oldest ends none."""
+    """WASDE's page 3 as recorded, ``NOVEMBER[3]``, runs 2020-07-10 back to 2018-12-11 with
+    three older releases out of place, 95866 of 1995-01-31 among them: its newest ends a walk
+    from a later ``since``, and its oldest ends none."""
     assert tasks._newest_before(since)(releases_of(NOVEMBER[3])) is last
     assert tasks._newest_before(since)([]) is False, "an empty page ends the walk anyway"
 
@@ -1111,9 +1113,9 @@ def test_with_page_any_since_only_filters_the_page(
 def test_list_recent_releases_returns_esmis_s_test_releases(replay_fixture: ReplayFixture) -> None:
     """ESMIS's catalog lists test releases among the others, and the task returns them as listed.
 
-    Page 0 of 2026-10-27 holds three, the identifier ``test`` and the title ``Test DDO``
-    (``docs/upstream/OBSERVED.md``, "``/release/findAll`` lists test releases"), and the
-    tool's description names them (https://github.com/xippios/sdk-usda-esmis/issues/32).
+    ``release_find_all/page0.json`` holds three, the identifier ``test`` and the title
+    ``Test DDO`` (``docs/upstream/OBSERVED.md``, "``/release/findAll`` lists test releases"),
+    and the tool's description names them (https://github.com/xippios/sdk-usda-esmis/issues/32).
     """
     replay_fixture("release_find_all", "page0")
     result = tasks.list_recent_releases(page=0)

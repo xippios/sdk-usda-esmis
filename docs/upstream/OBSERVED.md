@@ -52,7 +52,8 @@ and `publication_search/wasde_page0.json`.
 
 `Publication.frequency` printed `""` on one publication of the walk, 1172, a value the
 document's enumeration does not list. `status`, `subscribable` and `resource_type` held
-only the document's values.
+only the document's values: 2033 `Active` and 489 `Inactive`, 2068 `Yes` and 454 `No`, and
+2404 `Report`, 78 `Statistical bulletin` and 40 `Dataset` of 2522 publications.
 
 Probe: 2026-10-27, `esmis_api_publication_findAll`, pages 0 to 100; sample the packaged
 table's row of publication 1172.

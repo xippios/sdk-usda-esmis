@@ -99,8 +99,8 @@ where it changes them.
   tolerance (`tasks.ORDER_TOLERANCE`), and it refuses a walk from a `since` before
   2025-09-12, ESMIS's migration, below which the ids do not follow the dates
   (`tasks.CATALOG_ORDER_SINCE`; "`/release/findAll` lists the highest id first"). The order
-  beyond the two pages is read from the WASDE recordings, not probed, and the live test
-  checks the id order of page 0 nightly. `list_releases` relies on a publication's
+  beyond the two pages is read from the WASDE recordings, as that note says, and the live
+  test checks the id order of page 0 nightly. `list_releases` relies on a publication's
   releases coming newest first page by page ("A publication's releases come newest first
   page by page"): no page lists a release dated after the newest of a page before it. So
   its walk from `since` ends after the first page whose newest release is dated before

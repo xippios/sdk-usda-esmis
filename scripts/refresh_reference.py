@@ -27,9 +27,10 @@ repository root::
     uv run python scripts/refresh_reference.py --only agency    # one table, the other kept
     uv run python scripts/refresh_reference.py --render-only    # the provenance rows alone
 
-The budget: 102 requests, the agency list and 101 publication pages as of 2026-10-27 (2522
-publications), one more for each 25 publications upstream added since, each sent once, at
-the client's pace of 30 a minute, burst 1: about four minutes. ``--render-only`` sends none.
+The budget: 102 requests, the agency list and the 101 publication pages that the packaged
+table was fetched from (2522 publications), one more for each 25 publications upstream added
+since, each sent once, at the client's pace of 30 a minute, burst 1: about four minutes.
+``--render-only`` sends none.
 """
 
 import math
@@ -49,9 +50,9 @@ AGENCIES = "esmis_api_agency_findAll"
 PUBLICATIONS = "esmis_api_publication_findAll"
 COLUMNS = ", ".join(PublicationRow.model_fields)
 PUBLICATION_PAGES = 200
-"""The most pages the walk of every publication fetches: about twice the 101 of 2026-10-27,
-so a catalog that doubled stops the run before it spends its requests, and the bound is
-raised once the count is checked."""
+"""The most pages the walk of every publication fetches: about twice the 101 that the packaged
+table was fetched from, so a catalog that doubled stops the run before it spends its requests,
+and the bound is raised once the count is checked."""
 
 
 async def agencies() -> PackagedList:

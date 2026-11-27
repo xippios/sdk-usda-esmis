@@ -34,13 +34,13 @@ model does not name is dropped when parsed, never refused. That is how
 ``PublicationResults`` and ``ReleaseResults`` take the list wrapper's ``filters``,
 ``sorters`` and ``system`` keys, which the document does not name.
 
-The document declares four enumerations on ``Publication``. A walk of every page of
-``esmis_api_publication_findAll`` on 2026-10-27 (pages 0 to 100, 2522 publications)
-settled them by evidence: ``status``, ``subscribable`` and ``resource_type`` used only
-the document's values and are ``StrEnum`` (``Status``, ``Subscribable``,
-``ResourceType``), members named by core's ``enum_member_name`` rule, values as upstream
-prints them; ``frequency`` stays ``str``, since publication 1172 printed it as ``""``,
-which the document does not list.
+The document declares four enumerations on ``Publication``, and a walk of every page of
+``esmis_api_publication_findAll`` settled them by evidence (``docs/upstream/OBSERVED.md``,
+"``frequency`` outside its enumeration"): ``status``, ``subscribable`` and
+``resource_type`` use only the document's values and are ``StrEnum`` (``Status``,
+``Subscribable``, ``ResourceType``), members named by core's ``enum_member_name`` rule,
+values as upstream prints them; ``frequency`` stays ``str``, since publication 1172 prints
+it as ``""``, which the document does not list.
 """
 
 from enum import StrEnum
@@ -70,8 +70,8 @@ __all__ = [
 class Status(StrEnum):
     """A publication's ``status``: ``Active`` or ``Inactive``.
 
-    The document's enumeration of ``Publication.status``. The walk of 2026-10-27 counted
-    2033 ``Active`` and 489 ``Inactive`` of 2522 publications.
+    The document's enumeration of ``Publication.status``. The packaged table counts 2033
+    ``Active`` and 489 ``Inactive`` of 2522 publications.
     """
 
     ACTIVE = "Active"
@@ -82,8 +82,9 @@ class Subscribable(StrEnum):
     """Whether a publication is ``subscribable``: the text ``Yes`` or ``No``.
 
     The document's enumeration of ``Publication.subscribable``, unquoted ``Yes`` and
-    ``No`` there, which a YAML 1.1 reader takes for booleans; the wire sends the strings.
-    The walk of 2026-10-27 counted 2068 ``Yes`` and 454 ``No`` of 2522 publications.
+    ``No`` there, which a YAML 1.1 reader takes for booleans; the wire sends the strings,
+    and only those two (``docs/upstream/OBSERVED.md``, "``frequency`` outside its
+    enumeration", which counts them).
     """
 
     YES = "Yes"
@@ -93,9 +94,8 @@ class Subscribable(StrEnum):
 class ResourceType(StrEnum):
     """A publication's ``resource_type``: ``Report``, ``Dataset`` or ``Statistical bulletin``.
 
-    The document's enumeration of ``Publication.resource_type``. The walk of 2026-10-27
-    counted 2404 ``Report``, 78 ``Statistical bulletin`` and 40 ``Dataset`` of 2522
-    publications.
+    The document's enumeration of ``Publication.resource_type``. The packaged table counts
+    2404 ``Report``, 78 ``Statistical bulletin`` and 40 ``Dataset`` of 2522 publications.
     """
 
     REPORT = "Report"
@@ -173,9 +173,8 @@ class Publication(UpstreamModel):
     ``publication_agency_export_1``, a field the document does not name, instead. As
     recorded, every publication of ``esmis_api_publication_findAll`` carries
     ``agency_acronym`` and no ``publication_agency_export_1``, and every one of the
-    other four publication operations the reverse; the walk of every
-    ``esmis_api_publication_findAll`` page on 2026-10-27 found ``agency_acronym`` on all
-    2522 and ``publication_agency_export_1`` on none. Both are kept as upstream prints
+    other four publication operations the reverse (``docs/upstream/OBSERVED.md``,
+    "``agency_acronym`` comes from one operation alone"). Both are kept as upstream prints
     them, neither merged into the other. Every other field was on all 2522 publications
     of the walk, and is required.
 
@@ -189,10 +188,10 @@ class Publication(UpstreamModel):
         keywords: ``keywords``, e.g. ``["dairy", "grains", "soybeans"]``.
         frequency: ``frequency``, text; the document lists ``Daily``, ``Bi-weekly``,
             ``Weekly``, ``Monthly``, ``Annually``, ``Seasonal``, ``Other`` and ``Not
-            specified``. The walk of 2026-10-27 counted 842 ``Weekly``, 693 ``Daily``,
-            329 ``Not specified``, 212 ``Other``, 180 ``Annually``, 178 ``Monthly``, 84
-            ``Seasonal``, 3 ``Bi-weekly`` and one ``""`` (publication 1172, page 33),
-            which the document does not list, so it stays ``str``.
+            specified``. The packaged table counts 842 ``Weekly``, 693 ``Daily``, 329
+            ``Not specified``, 212 ``Other``, 180 ``Annually``, 178 ``Monthly``, 84
+            ``Seasonal``, 3 ``Bi-weekly`` and one ``""`` (publication 1172), which the
+            document does not list, so it stays ``str``.
         status: ``status``, a ``Status``, e.g. ``Status.ACTIVE`` (``"Active"``).
         subscribable: ``subscribable``, a ``Subscribable``, the text ``"Yes"`` or
             ``"No"``, not a boolean.
@@ -211,9 +210,10 @@ class Publication(UpstreamModel):
             strings, parsed into aware datetimes with the offset as printed, e.g.
             ``2026-10-28T15:00:00-0400`` and ``2026-11-04T15:00:00-0500`` for Broiler
             Hatchery (``tests/fixtures/publication_find_by_id/1863.json``), an Eastern
-            offset where ``Release.release_datetime`` prints ``+0000``. ``[]`` on most:
-            the walk of 2026-10-27 found items on 24 of 2522 publications, 67 in all,
-            every one ``YYYY-MM-DDTHH:MM:SS-HHMM``.
+            offset where ``Release.release_datetime`` prints ``+0000``. ``[]`` on most
+            publications, and every item ``YYYY-MM-DDTHH:MM:SS-HHMM``
+            (``docs/upstream/OBSERVED.md``, "``upcoming_releases`` print an Eastern
+            offset").
         agency_acronym: ``agency_acronym``, e.g. ``["AMS", "AMS-DA"]``; ``None`` where
             upstream leaves it out.
         publication_agency_export_1: ``publication_agency_export_1``, e.g.
