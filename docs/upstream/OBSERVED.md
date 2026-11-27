@@ -101,8 +101,9 @@ and `release_find_by_identifier/unknown.json`.
 
 ### Answers carry ESMIS's own cache headers
 
-Of the 23 answers of HTTP 200 recorded under `/api/v1/`, 21 carry `cache-control:
-max-age=3600, public` and an `x-drupal-cache` header, whatever the operation: `HIT` on 9,
+Of the 23 answers of HTTP 200 recorded under `/api/v1/` on 2026-10-27 and 2026-10-28, 21
+carry `cache-control: max-age=3600, public` and an `x-drupal-cache` header, whatever the
+operation: `HIT` on 9,
 which Drupal answered from its cache, and `MISS` on 12, which it rendered anew, as
 publication 1659 is a `HIT` and publication 1863 a `MISS` of `/publication/findById`. The
 other two, the searches without a query and with an empty one, carry `must-revalidate,
@@ -135,7 +136,7 @@ an identifier that holds `/`, publication 654's among them.
 both: `AMS_1045` answered publications 1443, which lists `AMS_1045` alone, and 2064, which
 lists `MD_DA530` and `AMS_1045`, both titled `Dry Whey - Central U.S.`, with
 `total_results` 2. `/release/findByIdentifier` answers the releases of both publications
-in one list, latest first: for `AMS_1045` it counted 706 on 29 pages, and its page 0 held
+in one list: for `AMS_1045` it counted 706 on 29 pages, and its page 0 held, latest first,
 release 794730 of 2025-09-26, which carries `AMS_1045` alone, before releases 420677 to
 420688 of 2025-08-18 back to 2025-06-02, which carry both identifiers. Each release stood
 on the page once for each agency acronym of its publication, `AMS` and `AMS-DA`, the two
@@ -207,15 +208,40 @@ Probe: 2026-10-27 and 2026-10-28, `esmis_api_release_findAll`, pages 0 and 1; sa
 `release_find_all/page0.json` and `release_find_all/page1.json`, and the packaged table's
 2522 rows.
 
-### A publication's releases come latest first
+### A publication's releases come newest first page by page
 
 A publication's releases (`/release/findByIdentifier`) come latest `release_datetime`
-first whatever their ids, as recorded on WASDE's pages 0 and 1: 50 releases, 2026-10-09
-back to 2022-08-12, of the 703 on 29 pages that the pager counted, an order that
-https://github.com/xippios/sdk-usda-esmis/issues/67 reports pages 3 and 4 do not hold.
+first page by page, whatever their ids, and not release by release. WASDE's list held 704
+releases on 29 pages on 2026-11-27, each id once, 25 a page and 4 on the last. Pages 0 to 2
+and 5 to 28 ran in date order, and pages 3 and 4 did not: 21 older releases stood there,
+missing from pages 10 to 12 and 16, where their dates would put them. Page 3 lists release
+95866 of 1995-01-31 between those of 2019-08-12 and 2019-07-11 and ends with 95733 of
+2004-11-12 and 95735 of 2004-09-10; page 4 opens with eighteen releases of 2002-03-08 to
+2006-05-12 before those of 2018-11-08 back to 2018-05-10, among which 95559 of 2018-10-11
+comes before 95558 of 2018-11-08.
 
-Probe: 2026-10-27, `esmis_api_release_findByIdentifier` for `wasde`, pages 0 and 1;
-samples `release_find_by_identifier/wasde_page0.json` and
+What held on all 29 pages is that each page's newest release is dated before the newest
+of the page before it. So page 0 opens with the latest release, and past the first page
+whose newest release is dated before a date, no page holds a release from that date on. A
+walk that ends at that page, as `list_releases` from `since` does, reached every release
+from `since` on for every date the list holds, checked offline against all 29 pages: it
+requests 6 pages for a `since` of 2018-06-01, 8 for 2015-10-01, 10 for 2010-07-01, 18 for
+1995-02-01 and 24 for 1982-02-12, and needs a 25th, past its bound, for any `since` before
+1982-02-12. A walk that ends at the first page whose oldest release is dated before `since`
+ends at page 3 for any `since` from 1995-02-01 to 2020-08-12, and so missed releases from a
+`since` of 1995-02-01 to 2018-11-08. A release filed on a later page with a date after the
+newest of an earlier page would break the order; the probe saw none, and it read WASDE's
+list alone. On 2026-10-27 the list counted 703 releases on 29 pages, and its pages 0 and 1
+ran in date order.
+
+Probe: 2026-11-27, `esmis_api_release_findByIdentifier` for `wasde`, pages 0 to 28 between
+06:17 and 06:19 UTC and pages 3 and 4 once before them at 05:56 UTC, 31 requests without a
+key; samples `release_find_by_identifier/wasde_2026_11_27_page0.json` to
+`release_find_by_identifier/wasde_2026_11_27_page7.json`, the pages a walk from 2015-10-01
+reads, pages 8 to 28 not recorded. The probe kept each answer's body and no header, so
+these eight samples hold the status, 200, and the body alone. On 2026-10-27, pages 0 and 1;
+samples
+`release_find_by_identifier/wasde_page0.json` and
 `release_find_by_identifier/wasde_page1.json`.
 
 ### Publication lists follow no id order
@@ -271,21 +297,33 @@ three-segment path the document's example shows
 
 Probe: 2026-10-27 and 2026-10-28, `esmis_api_release_findById` for 796099 and 95621;
 samples `release_find_by_id/796099.json` and `release_find_by_id/95621.json`, and the
-files of the 97 releases recorded under `tests/fixtures/`.
+files of the 97 releases recorded under `tests/fixtures/` on those days. On 2026-11-27,
+the files of the 200 releases on WASDE's pages 0 to 7, which take the same two shapes;
+samples `release_find_by_identifier/wasde_2026_11_27_page0.json` to
+`release_find_by_identifier/wasde_2026_11_27_page7.json`.
 
-### A release lists one to six files
+### A release lists one to seven files
 
-The 97 releases recorded hold one to six files each: 50 four, WASDE's PDF, TXT, XLS and
-XML; 42 three, a PDF, a TXT and a ZIP; the four of `weather_weekly` one PDF; and release
-95621, the WASDE of 2013-08-12, six, an original and a revised file of each of three
-formats (`ORIGwasde-08-12-2013.xml` before `wasde-08-12-2013.xml`). No answer states a
+The 97 releases recorded on 2026-10-27 and 2026-10-28 hold one to six files each: 50 four,
+WASDE's PDF, TXT, XLS and XML; 42 three, a PDF, a TXT and a ZIP; the four of
+`weather_weekly` one PDF; and release 95621, the WASDE of 2013-08-12, six, an original and
+a revised file of each of three formats (`ORIGwasde-08-12-2013.xml` before
+`wasde-08-12-2013.xml`). WASDE's pages 0 to 7 of 2026-11-27 hold one release of seven,
+95622 of 2013-07-11, which lists an `ORIG`, an `R1` and a plain file of the PDF and the
+XLS beside one XML, and three older releases with other files: 95715 a
+`wasde-05-12-2006_Revisions.doc` beside a TXT and a PDF, 95616 one file,
+`wasde-01-23-2014.asc`, and 95866 a `readme.txt` with `95501.zip`. No answer states a
 file's size.
 
 Probe: 2026-10-27 and 2026-10-28, `esmis_api_release_findAll`, pages 0 and 1,
 `esmis_api_release_findByIdentifier` for `wasde`, pages 0 and 1, and
 `esmis_api_release_findById` for 95621; samples `release_find_all/page0.json`,
 `release_find_all/page1.json`, `release_find_by_identifier/wasde_page0.json`,
-`release_find_by_identifier/wasde_page1.json` and `release_find_by_id/95621.json`.
+`release_find_by_identifier/wasde_page1.json` and `release_find_by_id/95621.json`. On
+2026-11-27, `esmis_api_release_findByIdentifier` for `wasde`, pages 0 to 7; samples
+`release_find_by_identifier/wasde_2026_11_27_page3.json` (95866),
+`release_find_by_identifier/wasde_2026_11_27_page4.json` (95715) and
+`release_find_by_identifier/wasde_2026_11_27_page7.json` (95622 and 95616).
 
 ## The release calendar
 

@@ -662,7 +662,7 @@ async def test_release_find_by_id(replay_fixture: ReplayFixture) -> None:
 
 
 async def test_release_find_by_identifier(replay_fixture: ReplayFixture) -> None:
-    """A publication's releases come with the latest release time first."""
+    """Page 0 of a publication's releases comes with the latest release time first."""
     route = replay_fixture("release_find_by_identifier", "wasde_page0")
     page = (await api.release_find_by_identifier("wasde", page=0)).payload
     assert page.pager == Pager(current_page=0, items_per_page=25, total_pages=29, total_results=703)

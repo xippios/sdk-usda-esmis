@@ -101,9 +101,15 @@ where it changes them.
   (`tasks.CATALOG_ORDER_SINCE`; "`/release/findAll` lists the highest id first"). The order
   beyond the two pages is read from the WASDE recordings, not probed, and the live test
   checks the id order of page 0 nightly. `list_releases` relies on a publication's
-  releases coming latest first ("A publication's releases come latest first") and says so
-  in its docstring: the first row of its `page=0` is the publication's latest release; the
-  live test `test_page_zero_of_a_publication_is_newest_first` checks it nightly.
+  releases coming newest first page by page ("A publication's releases come newest first
+  page by page"): no page lists a release dated after the newest of a page before it. So
+  its walk from `since` ends after the first page whose newest release is dated before
+  `since`, and the first row of its `page=0` is the latest release, as its docstring
+  says. The live test `test_page_zero_of_a_publication_is_newest_first` checks page 0's
+  order nightly, and
+  `test_no_recorded_page_lists_a_release_after_the_newest_of_a_page_before_it` the order
+  across pages offline, on WASDE's recorded pages 0 to 7; a nightly check of pages 1 to 4
+  would add four requests to the live run.
 - **Enumerations.** `status`, `subscribable` and `resource_type` of `Publication` are
   `StrEnum`s written by hand in `models.py`, which
   `test_the_enumerations_written_by_hand_follow_the_document` holds against the
@@ -144,11 +150,11 @@ where it changes them.
   (`page = offset // 25`) under one bound, `tasks.WALK_PAGES`, 24 pages, for Python and
   MCP alike (sdk-core ADR-0034, amendment 2026-11-24;
   https://github.com/xippios/sdk-cashctrl/issues/135, part 4), and upstream's count, never
-  the echoed `current_page`: a walk ends at a short page, at upstream's count, for
-  `list_releases` after the first page whose oldest release is dated before `since`, and
-  for `list_recent_releases` after the first page whose newest release is dated more than
-  `tasks.ORDER_TOLERANCE` before `since` (Order, above); the two stop rules are passed
-  only where `since` is given. A walk that needs more than 24 pages is refused with core's
+  the echoed `current_page`: a walk ends at a short page, at upstream's count, and after
+  the first page whose newest release is dated before `since` for `list_releases`, or
+  more than `tasks.ORDER_TOLERANCE` before it for `list_recent_releases`, by one rule,
+  `tasks._newest_before` (Order, above); the stop rule is passed only where `since` is
+  given. A walk that needs more than 24 pages is refused with core's
   `InvalidRequestError`, naming the count, the bound and `page`: after its first request
   where upstream's count shows it, as for `list_releases("wasde")` without `since`, and
   `list_recent_releases` without `since`, or with `until` alone, and after its 24th where
@@ -229,7 +235,7 @@ where it changes them.
   lookup, an unknown name is `InvalidRequestError` naming the release's files, and a name
   of another format one naming its format, each saying that the release was read and no
   file requested. A release with an original and a revised file of one format (95621,
-  "A release lists one to six files") is reached by `name` (decided in
+  "A release lists one to seven files") is reached by `name` (decided in
   https://github.com/xippios/sdk-usda-esmis/pull/10). A release's files are
   `Release.release_files()`, `ReleaseFile.from_url` on each URL, in upstream order: the
   reading a dependent calls rather than copies (sdk-core ADR-0021); `get_release` answers
