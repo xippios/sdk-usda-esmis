@@ -667,10 +667,11 @@ async def list_recent_releases_async(
     days before ``since``, and ``meta.notes`` names the rule that ended the walk: at most 24
     requests, 96 attempts with the client's retries, about eleven months back, an estimate.
     A walk that needs more, and one without ``since``, is refused, naming ``page``; one
-    from a ``since`` before 2025-09-12, ESMIS's migration, is refused before any request,
-    and ``list_releases`` serves one publication's older releases. ``since`` and ``until``
-    keep the releases whose printed date lies between them, both included. ``meta.total``
-    is upstream's count of every release.
+    from a ``since`` before 2025-09-12, ESMIS's migration, before any request, and
+    ``list_releases`` serves one publication's older releases. ``since`` and ``until``
+    keep the releases whose printed date lies between them, both included, ESMIS's test
+    releases among them (identifier ``"test"``, title ``"Test DDO"``). ``meta.total`` is
+    upstream's count of every release.
 
     Args:
         since: The earliest release date to keep, e.g. ``2026-10-20`` (a date); without

@@ -99,6 +99,23 @@ Probe: 2026-10-27, the eight lookups named; samples `agency_find_by_id/unknown.j
 `publication_find_by_agency/unknown.json`, `publication_find_by_identifier/unknown.json`
 and `release_find_by_identifier/unknown.json`.
 
+### Answers carry ESMIS's own cache headers
+
+Of the 23 answers of HTTP 200 recorded under `/api/v1/`, 21 carry `cache-control:
+max-age=3600, public` and an `x-drupal-cache` header, whatever the operation: `HIT` on 9,
+which Drupal answered from its cache, and `MISS` on 12, which it rendered anew, as
+publication 1659 is a `HIT` and publication 1863 a `MISS` of `/publication/findById`. The
+other two, the searches without a query and with an empty one, carry `must-revalidate,
+no-cache, private` and `x-drupal-cache: UNCACHEABLE (response policy)`. The four answers
+to an unknown id, HTTP 404, carry `must-revalidate, no-cache, private` and
+`x-drupal-cache: UNCACHEABLE (no cacheability)`. So a cache between may keep most answers
+for an hour; how long ESMIS's answer lags a new release is not recorded.
+
+Probe: 2026-10-27 and 2026-10-28, the 28 answers recorded under `/api/v1/` for every
+wrapper; samples `publication_find_by_id/1659.json` (`HIT`),
+`publication_find_by_id/1863.json` (`MISS`), `publication_search/no_query.json` and
+`publication_search/empty_query.json`, and `release_find_by_id/unknown.json`.
+
 ### An identifier carrying `/` cannot be looked up
 
 An identifier carrying `/` (`Market and Trade Economics Division/FDS`) cannot be looked
@@ -161,11 +178,41 @@ Probe: 2026-10-27 and 2026-10-28, `esmis_api_release_findAll`, pages 0 and 1; sa
 `release_find_by_identifier/wasde_page0.json`,
 `release_find_by_identifier/wasde_page1.json` and `release_find_by_id/95621.json`.
 
+### The catalog's count and the span of a page
+
+Page 0 of `/release/findAll` counted 1,542,025 releases on 61,681 pages on 2026-10-27, and
+page 1 counted 1,542,028 on 61,682 a day later. A page of 25 spanned about two weeks of
+release dates: page 0 runs 2026-10-26 back to 2026-09-28, and page 1 2026-10-09 back to
+2026-09-24. Toward ESMIS's migration the ids lie denser: WASDE's new ids run 791996
+(2025-09-12) to 795643 (2025-11-14), 3,647 ids in two months, against 456 from there to
+796099 (2026-10-09) in the eleven months after. At the recent span, the 24 pages of one
+walk of `list_recent_releases` reach about eleven months back, an estimate, and fewer
+toward the migration.
+
+Probe: 2026-10-27 and 2026-10-28, `esmis_api_release_findAll`, pages 0 and 1, and
+`esmis_api_release_findByIdentifier` for `wasde`, page 0; samples
+`release_find_all/page0.json`, `release_find_all/page1.json` and
+`release_find_by_identifier/wasde_page0.json`.
+
+### `/release/findAll` lists test releases
+
+`/release/findAll` lists, among the others, releases whose identifier is `test` and whose
+title is `Test DDO`, under the agency `NASS`: page 0 of 2026-10-27 held three, 796113
+(2026-10-21), 796105 (2026-10-14) and 796098 (2026-09-28), each with three files named
+`test26` (`.pdf`, `.zip` and `.txt`), and page 1 of 2026-10-28 held 796098 again, the
+catalog three releases longer. The packaged table of 2026-10-27 lists no publication with
+the identifier `test`. `list_recent_releases` returns them as ESMIS lists them.
+
+Probe: 2026-10-27 and 2026-10-28, `esmis_api_release_findAll`, pages 0 and 1; samples
+`release_find_all/page0.json` and `release_find_all/page1.json`, and the packaged table's
+2522 rows.
+
 ### A publication's releases come latest first
 
 A publication's releases (`/release/findByIdentifier`) come latest `release_datetime`
 first whatever their ids, as recorded on WASDE's pages 0 and 1: 50 releases, 2026-10-09
-back to 2022-08-12.
+back to 2022-08-12, of the 703 on 29 pages that the pager counted, an order that
+https://github.com/xippios/sdk-usda-esmis/issues/67 reports pages 3 and 4 do not hold.
 
 Probe: 2026-10-27, `esmis_api_release_findByIdentifier` for `wasde`, pages 0 and 1;
 samples `release_find_by_identifier/wasde_page0.json` and
@@ -216,13 +263,29 @@ answers too.
 
 ### `Release.files` paths take two shapes
 
+Every file of a recorded release is an absolute URL on `https://esmis.nal.usda.gov`.
 Recent releases use `/sites/default/release-files/{release id}/{name}.{ext}`
 (`/sites/default/release-files/796099/wasde1026.txt`), older ones the hashed
 three-segment path the document's example shows
 (`/sites/default/release-files/8336h188j/2514qk05k/j0991c960/prog3925.pdf`).
 
 Probe: 2026-10-27 and 2026-10-28, `esmis_api_release_findById` for 796099 and 95621;
-samples `release_find_by_id/796099.json` and `release_find_by_id/95621.json`.
+samples `release_find_by_id/796099.json` and `release_find_by_id/95621.json`, and the
+files of the 97 releases recorded under `tests/fixtures/`.
+
+### A release lists one to six files
+
+The 97 releases recorded hold one to six files each: 50 four, WASDE's PDF, TXT, XLS and
+XML; 42 three, a PDF, a TXT and a ZIP; the four of `weather_weekly` one PDF; and release
+95621, the WASDE of 2013-08-12, six, an original and a revised file of each of three
+formats (`ORIGwasde-08-12-2013.xml` before `wasde-08-12-2013.xml`). No answer states a
+file's size.
+
+Probe: 2026-10-27 and 2026-10-28, `esmis_api_release_findAll`, pages 0 and 1,
+`esmis_api_release_findByIdentifier` for `wasde`, pages 0 and 1, and
+`esmis_api_release_findById` for 95621; samples `release_find_all/page0.json`,
+`release_find_all/page1.json`, `release_find_by_identifier/wasde_page0.json`,
+`release_find_by_identifier/wasde_page1.json` and `release_find_by_id/95621.json`.
 
 ## The release calendar
 
