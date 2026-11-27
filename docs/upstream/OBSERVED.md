@@ -101,8 +101,9 @@ and `release_find_by_identifier/unknown.json`.
 
 ### Answers carry ESMIS's own cache headers
 
-Of the 23 answers of HTTP 200 recorded under `/api/v1/`, 21 carry `cache-control:
-max-age=3600, public` and an `x-drupal-cache` header, whatever the operation: `HIT` on 9,
+Of the 23 answers of HTTP 200 recorded under `/api/v1/` on 2026-10-27 and 2026-10-28, 21
+carry `cache-control: max-age=3600, public` and an `x-drupal-cache` header, whatever the
+operation: `HIT` on 9,
 which Drupal answered from its cache, and `MISS` on 12, which it rendered anew, as
 publication 1659 is a `HIT` and publication 1863 a `MISS` of `/publication/findById`. The
 other two, the searches without a query and with an empty one, carry `must-revalidate,
@@ -237,7 +238,9 @@ Probe: 2026-11-27, `esmis_api_release_findByIdentifier` for `wasde`, pages 0 to 
 06:17 and 06:19 UTC and pages 3 and 4 once before them at 05:56 UTC, 31 requests without a
 key; samples `release_find_by_identifier/wasde_2026_11_27_page0.json` to
 `release_find_by_identifier/wasde_2026_11_27_page7.json`, the pages a walk from 2015-10-01
-reads, pages 8 to 28 not recorded. On 2026-10-27, pages 0 and 1; samples
+reads, pages 8 to 28 not recorded. The probe kept each answer's body and no header, so
+these eight samples hold the status, 200, and the body alone. On 2026-10-27, pages 0 and 1;
+samples
 `release_find_by_identifier/wasde_page0.json` and
 `release_find_by_identifier/wasde_page1.json`.
 

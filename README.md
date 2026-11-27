@@ -87,7 +87,8 @@ order, to the first page whose newest release is dated before it.
 publication since a date, latest catalogued first. A walk of pages sends at most 24
 requests, in Python and over MCP alike, and one that needs more is refused and returns
 nothing, naming `page`: after its first request where upstream's count shows it, as for
-`list_releases("wasde")` without `since`, WASDE's 703 releases filling 29 pages, and
+`list_releases("wasde")` without `since`, WASDE's 703 releases of 2026-10-27 filling 29
+pages, and
 `list_recent_releases` without `since`, and after its 24th where a walk from `since`
 reaches no page that ends it within them, as for WASDE's releases from a `since` before
 1982-02-12 on its list of 2026-11-27. A walk from a

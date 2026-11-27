@@ -102,15 +102,14 @@ where it changes them.
   beyond the two pages is read from the WASDE recordings, not probed, and the live test
   checks the id order of page 0 nightly. `list_releases` relies on a publication's
   releases coming newest first page by page ("A publication's releases come newest first
-  page by page"), as WASDE's whole list did on 2026-11-27 with older releases out of
-  place on its pages 3 and 4: no page lists a release dated after the newest of a page
-  before it. So its walk from `since` ends after the first page whose newest release is
-  dated before `since`, and the first row of its `page=0` is the latest release, as its
-  docstring says. The live test `test_page_zero_of_a_publication_is_newest_first` checks
-  page 0's order nightly, and
+  page by page"): no page lists a release dated after the newest of a page before it. So
+  its walk from `since` ends after the first page whose newest release is dated before
+  `since`, and the first row of its `page=0` is the latest release, as its docstring
+  says. The live test `test_page_zero_of_a_publication_is_newest_first` checks page 0's
+  order nightly, and
   `test_no_recorded_page_lists_a_release_after_the_newest_of_a_page_before_it` the order
-  across pages offline, on WASDE's pages 0 to 7 of that day; a nightly check of pages 1
-  to 4 would add four requests to the live run.
+  across pages offline, on WASDE's recorded pages 0 to 7; a nightly check of pages 1 to 4
+  would add four requests to the live run.
 - **Enumerations.** `status`, `subscribable` and `resource_type` of `Publication` are
   `StrEnum`s written by hand in `models.py`, which
   `test_the_enumerations_written_by_hand_follow_the_document` holds against the

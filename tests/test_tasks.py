@@ -17,9 +17,10 @@ download's choice by ``format`` and ``name`` is tested on, without a download, a
 of every release (``release_find_all/page1.json``), which the walk of
 ``list_recent_releases`` crosses into. WASDE's release pages 0 to 7 of 2026-11-27
 (``release_find_by_identifier/wasde_2026_11_27_page0.json`` to ``_page7.json``), read once
-each by a probe of the whole list and written as served by core's writer, are the pages the
-walks of ``list_releases`` from ``since`` cross, the two that hold older releases out of
-place among them. The download is checked by path, size and content type, never by what
+each by a probe of the whole list, which kept each answer's body and no header, and written
+by core's writer with the status and the body alone, are the pages the walks of
+``list_releases`` from ``since`` cross, the two that hold older releases out of place among
+them. The download is checked by path, size and content type, never by what
 the file says (sdk-core ADR-0020).
 """
 
