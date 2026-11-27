@@ -105,7 +105,13 @@ def recorded_body(endpoint: str, case: str) -> Any:
 
 
 def recorded[T](type_: type[T], endpoint: str, case: str) -> T:
-    """A recorded answer, parsed as the wrapper parses it."""
+    """A recorded answer, parsed as the wrapper parses it.
+
+    The parsed recording is an input of the test, not an answer from ESMIS: no route serves
+    it and no ``classify`` reads it, and a test compares it or hands it straight to the code
+    under test, ``Release.release_files()`` and the walks' stop rules among them (conventions
+    §10; sdk-core ADR-0064, decision 3).
+    """
     return TypeAdapter(type_).validate_python(recorded_body(endpoint, case))
 
 
