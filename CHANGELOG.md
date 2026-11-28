@@ -10,9 +10,10 @@ All notable changes to this project are documented here. The format follows
 
 - `xippios.usda.esmis.params` exports `AGENCIES`, the packaged agency table's acronyms with
   their titles, which `list_publications` checks an `agency_acronym` against and every answer
-  names its agencies by in `meta.names`, and `PACKAGE`, the package whose `reference/` holds
-  the packaged tables. `PACKAGED_LISTS` names the two tables, `agency` and `publication`,
-  where it named none. (https://github.com/xippios/sdk-usda-esmis/pull/64)
+  that holds a release or a publication names its agencies by in `meta.names`, and `PACKAGE`,
+  the package whose `reference/` holds the packaged tables. `PACKAGED_LISTS` names the two
+  tables, `agency` and `publication`, where it named none.
+  (https://github.com/xippios/sdk-usda-esmis/pull/64)
 - `list_releases` answers an identifier that ESMIS counts no release for with the empty list,
   `meta.total` 0 and a note in `meta.notes` that says so and names `search_publications`.
   A date filter that keeps no release writes no note, since upstream counted the releases.
