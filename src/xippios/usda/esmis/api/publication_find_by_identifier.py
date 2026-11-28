@@ -12,7 +12,8 @@ The identifier is URL-quoted with ``safe=""``, so a space or a slash stays insid
 path segment. ESMIS's web server refuses an encoded slash with an HTML 404
 (``with_slash.json``, ``"Market and Trade Economics Division/FDS"``), which
 ``_client.classify`` raises as ``InvalidRequestError``, and a raw slash is no route
-either (probed 2026-10-27): an identifier carrying ``/`` cannot be looked up.
+either: an identifier carrying ``/`` cannot be looked up (``docs/upstream/OBSERVED.md``, "An
+identifier carrying ``/`` cannot be looked up").
 """
 
 from urllib.parse import quote

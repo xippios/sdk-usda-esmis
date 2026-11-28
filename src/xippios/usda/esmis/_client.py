@@ -98,12 +98,13 @@ def classify(response: httpx.Response) -> XippiosError | None:
       upstream's refusal of the request as given (conventions §5): ESMIS's web server
       answers it before the catalog sees it
       (``tests/fixtures/publication_find_by_identifier/with_slash.json``). A raw slash
-      is no route either: probed on 2026-10-27, Drupal answered its HTML "Page not
-      found", which falls under the next rule; the wrappers never send one. So an
-      identifier carrying ``/`` (``"Market and Trade Economics Division/FDS"``) cannot
-      be looked up. Of the 71 publications of the packaged table with such an identifier,
-      70 carry another without ``/`` (``"FDS"``), and publication 654 has none; the
-      refusal names ``list_publications``, which lists them.
+      is no route either, and Drupal's HTML "Page not found" for it falls under the next
+      rule; the wrappers never send one. So an identifier carrying ``/`` (``"Market and
+      Trade Economics Division/FDS"``) cannot be looked up (``docs/upstream/OBSERVED.md``,
+      "An identifier carrying ``/`` cannot be looked up"). Of the 71 publications of the
+      packaged table with such an identifier, 70 carry another without ``/`` (``"FDS"``),
+      and publication 654 has none; the refusal names ``list_publications``, which lists
+      them.
     - Any other 404 under ``/api/v1/`` is ``NotFoundError``: every lookup by id answers an
       unknown id with HTTP 404 ``{"message": ""}``, as recorded for
       ``esmis_api_agency_findById``, ``esmis_api_publication_findById``,
@@ -125,7 +126,7 @@ def classify(response: httpx.Response) -> XippiosError | None:
         return None
     if _slash_refused(response):
         return InvalidRequestError(
-            f"ESMIS's web server refused {request.method} {_sent_path(request)} with HTTP "
+            f"ESMIS's web server refused {request_description(response)} with HTTP "
             "404: it does not accept an encoded slash (%2F) in a path, so a value carrying "
             "'/' cannot be looked up. Pass another of the publication's identifiers, as "
             "list_publications (over MCP, the tool usda_esmis_list_publications) lists them: "

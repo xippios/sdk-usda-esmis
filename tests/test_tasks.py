@@ -15,19 +15,22 @@ exchange the download replays, and, on 2026-10-28, the WASDE of 2013-08-12
 (``release_find_by_id/95621.json``), whose original and revised files of one format the
 download's choice by ``format`` and ``name`` is tested on, without a download, and page 1
 of every release (``release_find_all/page1.json``), which the walk of
-``list_recent_releases`` crosses into. WASDE's release pages 0 to 7 of 2026-11-27
-(``release_find_by_identifier/wasde_2026_11_27_page0.json`` to ``_page7.json``), read once
-each by a probe of the whole list, which kept each answer's body and no header, and written
-by core's writer with the status and the body alone, are the pages the walks of
-``list_releases`` from ``since`` cross, the two that hold older releases out of place among
-them. The download is checked by path, size and content type, never by what
-the file says (sdk-core ADR-0020).
+``list_recent_releases`` crosses into. WASDE's release pages 0 to 7 recorded on 2026-11-27
+(``release_find_by_identifier/wasde_2026_11_27_page0.json`` to ``_page7.json``) are the
+pages the walks of ``list_releases`` from ``since`` cross, the two that hold older releases
+out of place among them, and the two answers recorded that day for ``AMS_1045``, an
+identifier that two publications share
+(``publication_find_by_identifier/AMS_1045_2026_11_27.json`` and
+``release_find_by_identifier/AMS_1045_2026_11_27_page0.json``), are what ``get_publication``
+refuses and what ``list_releases`` answers for it. The download is checked by path, size and
+content type, never by what the file says (sdk-core ADR-0020).
 """
 
 import importlib
 import inspect
 import json
 import re
+from collections import Counter
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from importlib import resources
@@ -49,7 +52,6 @@ from xippios.core import (
     ResultCap,
     UnknownCode,
     UpstreamModel,
-    ValidationError,
     check_dest,
     fetch_pages,
 )
@@ -85,7 +87,9 @@ API = f"{BASE_URL}/api/v1"
 WASDE_RELEASES = f"{API}/release/findByIdentifier/wasde"
 ALL_RELEASES = f"{API}/release/findAll"
 WASDE_TXT = f"{BASE_URL}/sites/default/release-files/796099/wasde1026.txt"
-FORMATS = {"pdf", "txt", "xls", "xml", "zip"}
+FORMATS = {"pdf", "txt", "xls", "xml", "zip", "doc", "asc"}
+"""Every format of a file of a release that a recording holds, ``.doc`` and ``.asc`` on two
+older WASDE releases (``docs/upstream/OBSERVED.md``, "A release lists one to seven files")."""
 OCTOBER_PRINTED = datetime(2026, 10, 9, 12, 0)
 """The October 2026 WASDE's ``release_datetime`` as printed, its ``+0000`` dropped."""
 PACKAGE = "xippios.usda.esmis"
@@ -128,7 +132,15 @@ def releases_of(case: str) -> list[Release]:
 
 
 NOVEMBER = [f"wasde_2026_11_27_page{page}" for page in range(8)]
-"""WASDE's release pages 0 to 7 as ESMIS served them on 2026-11-27, of 704 releases on 29."""
+"""WASDE's release pages 0 to 7, recorded on 2026-11-27, of 704 releases on 29 pages."""
+SHARED = "AMS_1045_2026_11_27"
+"""The answers recorded on 2026-11-27 for ``AMS_1045``, an identifier of publications 1443 and
+2064: the publication lookup, and page 0 of the release list, ``SHARED + "_page0"``."""
+
+
+def recorded_releases(endpoint: str, case: str) -> list[Release]:
+    """The releases of a recorded answer that lists them."""
+    return recorded(ReleaseResults, endpoint, case).results
 
 
 def recent_of(case: str) -> list[Release]:
@@ -522,11 +534,13 @@ async def test_a_page_of_another_size_stops_the_walk(respx_mock: respx.MockRoute
     """NOT RECORDED: page 0 of ``publication_search`` for ``wasde`` as recorded on 2026-10-27,
     its pager's ``items_per_page`` changed in memory from 25 to 50, a form upstream was not
     seen to send (conventions §10, kind 4): the walk counts its offsets in pages of 25, so it
-    refuses rather than skip or repeat items, naming what it sent."""
+    refuses rather than skip or repeat items, naming what it sent. A refusal from an answer
+    that parses, which tells the caller to pass ``page``, is ``InvalidRequestError``
+    (conventions §5)."""
     body = recorded_body("publication_search", "wasde_page0")
     body["pager"]["items_per_page"] = 50
     route = respx_mock.get(f"{API}/publication/search").respond(json=body)
-    with pytest.raises(ValidationError) as caught:
+    with pytest.raises(InvalidRequestError) as caught:
         await tasks.search_publications_async("wasde")
     assert str(caught.value).startswith(
         "ESMIS answered page 0 of GET /api/v1/publication/search in pages of 50 items, where "
@@ -549,27 +563,22 @@ def test_get_publication(replay_fixture: ReplayFixture) -> None:
 
 
 def test_get_publication_refuses_an_identifier_that_two_publications_share(
-    respx_mock: respx.MockRouter,
+    replay_fixture: ReplayFixture,
 ) -> None:
-    """NOT RECORDED: the recorded answer of ``publication_find_by_identifier/wasde.json`` with
-    a second recorded publication, 1762 of ``publication_search/wasde_page0.json``, appended to
-    its results and its pager counting 2, the form that the probe of ``AMS_1045`` saw and no
-    fixture holds (conventions §10, kind 4)."""
-    body = recorded_body("publication_find_by_identifier", "wasde")
-    second = recorded_body("publication_search", "wasde_page0")["results"][0]
-    assert second["id"] == "1762"
-    body["results"].append(second)
-    body["pager"]["total_results"] = 2
-    route = respx_mock.get(f"{API}/publication/findByIdentifier/wasde").respond(json=body)
+    """ESMIS answers ``AMS_1045`` with publications 1443 and 2064, its pager counting 2
+    (``docs/upstream/OBSERVED.md``, "An identifier that two publications share answers both")."""
+    route = replay_fixture("publication_find_by_identifier", SHARED)
+    publications = recorded(PublicationResults, "publication_find_by_identifier", SHARED)
+    assert [publication.id for publication in publications.results] == ["1443", "2064"]
     with pytest.raises(InvalidRequestError) as caught:
-        tasks.get_publication("wasde")
+        tasks.get_publication("AMS_1045")
     assert str(caught.value) == (
-        "ESMIS answered GET /api/v1/publication/findByIdentifier/wasde with 2 publications, "
-        "1659 and 1762, so the identifier names no one publication and none is returned; "
+        "ESMIS answered GET /api/v1/publication/findByIdentifier/AMS_1045 with 2 publications, "
+        "1443 and 2064, so the identifier names no one publication and none is returned; "
         f"{SEARCH_BY_KEYWORD}, and its answer holds each publication whole."
     )
     assert caught.value.source == SOURCE
-    assert sent_urls(route) == [f"{API}/publication/findByIdentifier/wasde"]
+    assert sent_urls(route) == [f"{API}/publication/findByIdentifier/AMS_1045"]
 
 
 def test_get_publication_unknown_is_not_found(replay_fixture: ReplayFixture) -> None:
@@ -610,6 +619,38 @@ def test_list_releases_one_page(replay_fixture: ReplayFixture) -> None:
     assert result.meta.total == 703, "upstream's count for the whole publication"
     assert (result.meta.vintage, result.meta.published_at) == (None, None)
     assert sent_urls(route) == [f"{WASDE_RELEASES}?page=0"]
+
+
+def test_list_releases_answers_a_page_of_a_shared_identifier_as_esmis_lists_it(
+    replay_fixture: ReplayFixture,
+) -> None:
+    """A page given is answered as upstream sends it (decision 6 of
+    https://github.com/xippios/sdk-usda-esmis/pull/66): for ``AMS_1045`` the releases of both
+    its publications, a release listed once for each agency acronym of its publication, so
+    the page's 25 rows hold twelve releases twice and the last, 420688, once
+    (``docs/upstream/OBSERVED.md``, "An identifier that two publications share answers
+    both")."""
+    case = f"{SHARED}_page0"
+    route = replay_fixture("release_find_by_identifier", case, match_params=["page"])
+    result = tasks.list_releases("AMS_1045", page=0)
+    assert result.data == releases_of(case)
+    assert len(result.data) == 25
+    rows = Counter(release.id for release in result.data)
+    assert sorted(rows.values()) == [1] + [2] * 12, "twelve releases twice, one once"
+    assert [id_ for id_, count in rows.items() if count == 1] == ["420688"]
+    assert result.data[-1].id == "420688", "in the page's last row"
+    assert [(release.id, release.agency_acronym) for release in result.data[:2]] == [
+        ("794730", "AMS"),
+        ("794730", "AMS-DA"),
+    ]
+    assert result.data[0].identifier == ["AMS_1045"], "publication 1443's identifier"
+    assert {tuple(release.identifier) for release in result.data[2:]} == {
+        ("MD_DA530", "AMS_1045")
+    }, "publication 2064's identifiers"
+    assert result.meta.total == 706, "upstream's count of rows, both publications' together"
+    assert result.meta.notes == []
+    assert result.meta.request == {"publication_identifier": "AMS_1045", "page": 0}
+    assert sent_urls(route) == [f"{API}/release/findByIdentifier/AMS_1045?page=0"]
 
 
 def test_list_releases_walks_to_the_first_page_whose_newest_release_is_before_since(
@@ -667,11 +708,12 @@ def test_a_walk_from_since_is_refused_where_24_pages_do_not_end_it(
 ) -> None:
     """A walk from ``since`` runs its stop rule, so core refuses it at the bound, not before.
 
-    NOT RECORDED at pages 8 to 23: page 7 of 2026-11-27 replayed at its own path for the
-    other pages, where its newest release, dated 2014-02-10, never ends a walk from
-    1982-02-11, a test that asserts what was sent and the refusal (conventions §10, kind 3).
-    On the list as ESMIS served it that day, page 23's newest release is dated 1982-02-11,
-    so such a walk needs a 25th page.
+    NOT RECORDED at pages 8 to 23: ``release_find_by_identifier/wasde_2026_11_27_page7.json``
+    replayed at its own path for the other pages, where its newest release, dated 2014-02-10,
+    never ends a walk from 1982-02-11, a test that asserts what was sent and the refusal
+    (conventions §10, kind 3). On WASDE's whole list page 23's newest release is dated
+    1982-02-11, so such a walk needs a 25th page (``docs/upstream/OBSERVED.md``, "A
+    publication's releases come newest first page by page").
     """
     routes = [
         replay_fixture("release_find_by_identifier", case, match_params=["page"])
@@ -711,7 +753,8 @@ def test_no_recorded_page_lists_a_release_after_the_newest_of_a_page_before_it()
 
 def test_the_description_of_list_releases_names_its_rule_and_the_dates_it_cannot_walk() -> None:
     """The tool's description says where a walk from ``since`` ends, and the text of ``since``
-    which WASDE dates the bound leaves to ``page``, as the probe of 2026-11-27 counted them."""
+    which WASDE dates the bound leaves to ``page``, as ``docs/upstream/OBSERVED.md`` counts
+    them under "A publication's releases come newest first page by page"."""
     description, arguments = (tasks.list_releases.__doc__ or "").split("Args:")
     flat = " ".join(description.split())
     assert "the first page whose newest release is dated before it" in flat
@@ -846,11 +889,11 @@ def test_list_recent_releases_walks_until_a_page_is_newest_more_than_14_days_bef
 ) -> None:
     """The walk goes on past a page whose oldest release is before ``since``.
 
-    The two pages were recorded a day apart, page 0 on 2026-10-27 and page 1 on
-    2026-10-28: three releases catalogued in between moved 796100, 796099 and 796098 from
-    the end of page 0 to the head of page 1, so both pages list them. ``since`` lies after
-    their dates (2026-10-09 and 2026-09-28), so the filter drops them, as it drops every
-    release of page 1.
+    The two pages were recorded a day apart, ``release_find_all/page0.json`` on 2026-10-27
+    and ``page1.json`` on 2026-10-28: three releases catalogued in between moved 796100,
+    796099 and 796098 from the end of page 0 to the head of page 1, so both pages list them.
+    ``since`` lies after their dates (2026-10-09 and 2026-09-28), so the filter drops them,
+    as it drops every release of page 1.
     """
     first = replay_fixture("release_find_all", "page0", match_params=["page"])
     second = replay_fixture("release_find_all", "page1", match_params=["page"])
@@ -929,9 +972,9 @@ def test_the_stop_rule_needs_a_page_newest_more_than_14_days_before_since(
 def test_the_stop_rule_of_list_releases_reads_a_page_s_newest_release(
     since: date, last: bool
 ) -> None:
-    """WASDE's page 3 of 2026-11-27 runs 2020-07-10 back to 2018-12-11 with three older
-    releases out of place, 95866 of 1995-01-31 among them: its newest ends a walk from a
-    later ``since``, and its oldest ends none."""
+    """WASDE's page 3 as recorded, ``NOVEMBER[3]``, runs 2020-07-10 back to 2018-12-11 with
+    three older releases out of place, 95866 of 1995-01-31 among them: its newest ends a walk
+    from a later ``since``, and its oldest ends none."""
     assert tasks._newest_before(since)(releases_of(NOVEMBER[3])) is last
     assert tasks._newest_before(since)([]) is False, "an empty page ends the walk anyway"
 
@@ -1083,9 +1126,9 @@ def test_with_page_any_since_only_filters_the_page(
 def test_list_recent_releases_returns_esmis_s_test_releases(replay_fixture: ReplayFixture) -> None:
     """ESMIS's catalog lists test releases among the others, and the task returns them as listed.
 
-    Page 0 of 2026-10-27 holds three, the identifier ``test`` and the title ``Test DDO``
-    (``docs/upstream/OBSERVED.md``, "``/release/findAll`` lists test releases"), and the
-    tool's description names them (https://github.com/xippios/sdk-usda-esmis/issues/32).
+    ``release_find_all/page0.json`` holds three, the identifier ``test`` and the title
+    ``Test DDO`` (``docs/upstream/OBSERVED.md``, "``/release/findAll`` lists test releases"),
+    and the tool's description names them (https://github.com/xippios/sdk-usda-esmis/issues/32).
     """
     replay_fixture("release_find_all", "page0")
     result = tasks.list_recent_releases(page=0)
@@ -1292,28 +1335,89 @@ def test_a_choice_the_release_cannot_serve_is_refused(
     assert caught.value.source == SOURCE
 
 
-@pytest.mark.parametrize(
-    ("endpoint", "case"),
-    [
-        ("release_find_all", "page0"),
-        ("release_find_all", "page1"),
-        ("release_find_by_id", "796099"),
-        ("release_find_by_id", "95621"),
-        ("release_find_by_identifier", "wasde_page0"),
-        ("release_find_by_identifier", "wasde_page1"),
-        ("release_find_by_pub_id", "1659_page0"),
-    ],
-)
+RECORDED_RELEASES = [
+    ("release_find_all", "page0"),
+    ("release_find_all", "page1"),
+    ("release_find_by_id", "796099"),
+    ("release_find_by_id", "95621"),
+    ("release_find_by_identifier", "wasde_page0"),
+    ("release_find_by_identifier", "wasde_page1"),
+    *(("release_find_by_identifier", case) for case in NOVEMBER),
+    ("release_find_by_identifier", f"{SHARED}_page0"),
+    ("release_find_by_pub_id", "1659_page0"),
+]
+"""Every recorded answer that lists releases with their files."""
+
+
+@pytest.mark.parametrize(("endpoint", "case"), RECORDED_RELEASES)
 def test_every_recorded_file_has_a_name_and_a_known_format(endpoint: str, case: str) -> None:
-    for release in recorded(ReleaseResults, endpoint, case).results:
+    for release in recorded_releases(endpoint, case):
         files = release.release_files()
         assert files == [ReleaseFile.from_url(url) for url in release.files]
         assert [file.url for file in files] == release.files, "verbatim, in upstream order"
         for file in files:
             assert file.url.endswith(f"/{file.name}")
             assert "/" not in file.name
-            assert file.name.endswith(f".{file.format}")
+            assert file.name.lower().endswith(f".{file.format}"), "AMS_1045.PDF among them"
             assert file.format in FORMATS, file.url
+
+
+def test_the_texts_on_formats_give_examples_and_name_every_recorded_one() -> None:
+    """The description of ``get_release`` and the docstring of ``ReleaseFile`` name every
+    format a recording holds, and the description gives them as examples, so that no text
+    reads as the whole list (https://github.com/xippios/sdk-usda-esmis/issues/76)."""
+    recorded = {
+        file.format
+        for endpoint, case in RECORDED_RELEASES
+        for release in recorded_releases(endpoint, case)
+        for file in release.release_files()
+    }
+    assert recorded == FORMATS
+    description = " ".join((tasks.get_release.__doc__ or "").split("Args:")[0].split())
+    model = " ".join((ReleaseFile.__doc__ or "").split("Attributes:")[0].split())
+    assert sorted(f for f in FORMATS if f'``"{f}"``' not in description) == []
+    assert sorted(f for f in FORMATS if f"``{f}``" not in model) == []
+    assert 'e.g. ``"pdf"``' in description, "examples, not the whole list"
+
+
+JULY_2013 = [
+    "R1wasde-07-11-2013.pdf",
+    "wasde-07-11-2013.xml",
+    "ORIGwasde-07-11-2013.xls",
+    "wasde-07-11-2013.pdf",
+    "R1wasde-07-11-2013.xls",
+    "ORIGwasde-07-11-2013.pdf",
+    "wasde-07-11-2013.xls",
+]
+"""The files of release 95622, the WASDE of 2013-07-11, in upstream order, as page 7 of
+``NOVEMBER`` lists them: its first PDF is the revision ``R1``, its first XLS the original."""
+
+
+def july_2013() -> Release:
+    (release,) = [release for release in releases_of(NOVEMBER[7]) if release.id == "95622"]
+    return release
+
+
+def test_release_files_of_95622_list_a_revision_first() -> None:
+    assert [file.name for file in july_2013().release_files()] == JULY_2013
+
+
+@pytest.mark.parametrize(
+    ("format", "name", "chosen"),
+    [
+        ("pdf", None, "R1wasde-07-11-2013.pdf"),
+        ("xls", None, "ORIGwasde-07-11-2013.xls"),
+        ("xml", None, "wasde-07-11-2013.xml"),
+        *((None, name, name) for name in JULY_2013),
+    ],
+    ids=["format-pdf-revision", "format-xls-original", "format-xml", *JULY_2013],
+)
+def test_format_alone_takes_the_first_file_listed_and_name_any_other(
+    format: str | None, name: str | None, chosen: str
+) -> None:
+    """``format`` alone takes the file ESMIS lists first, a revision or an original, and
+    ``name`` reaches each file (https://github.com/xippios/sdk-usda-esmis/issues/77)."""
+    assert tasks._select(july_2013(), format, name).name == chosen
 
 
 @pytest.mark.parametrize(
@@ -1379,11 +1483,26 @@ def test_download_release_file(
     assert result.meta.vintage == "796099"
     assert (result.meta.published_at, result.meta.published_at_naive) == (OCTOBER_PRINTED, True)
     assert result.meta.request == {"release_id": 796099, **chosen_by, "url": WASDE_TXT}
-    assert result.meta.retrieved_at == result.data.retrieved_at
+    assert result.meta.retrieved_at <= result.data.retrieved_at, "the older of the two times"
     assert_time_between(result.meta.retrieved_at, before, after)
     assert sent_urls(release) == [f"{API}/release/findById/796099"]
     assert sent_urls(file) == [WASDE_TXT]
     assert [path.name for path in tmp_path.iterdir()] == ["wasde1026.txt"], "no part file"
+
+
+def test_a_download_dates_its_answer_by_the_older_release_lookup(
+    replay_fixture: ReplayFixture, tmp_path: Path
+) -> None:
+    """A task that assembles several answers gives the oldest of their times (conventions
+    §4): read within the cache's 300 s, the release lookup is the stored answer, whose time is
+    before the file's (https://github.com/xippios/sdk-usda-esmis/issues/73)."""
+    release = replay_fixture("release_find_by_id", "796099")
+    replay_fixture("download_release_file", "wasde1026_txt")
+    read = tasks.get_release(796099)
+    result = tasks.download_release_file(796099, dest=tmp_path / "wasde1026.txt", format="txt")
+    assert result.meta.retrieved_at == read.meta.retrieved_at, "when the lookup was stored"
+    assert result.meta.retrieved_at < result.data.retrieved_at, "before the file was complete"
+    assert sent_urls(release) == [f"{API}/release/findById/796099"], "one lookup, then the cache"
 
 
 def test_download_release_file_refuses_a_format_the_release_lacks(

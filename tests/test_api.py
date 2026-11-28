@@ -21,7 +21,7 @@ from pathlib import Path
 import httpx
 import pydantic
 import pytest
-from xippios.core import Answer, InvalidRequestError, NotFoundError, parse
+from xippios.core import Answer, InvalidRequestError, NotFoundError, parse, request_description
 from xippios.core.testing import (
     ReplayFixture,
     assert_time_between,
@@ -535,7 +535,7 @@ async def test_publication_find_by_identifier_with_a_slash(replay_fixture: Repla
     assert recorded_url("publication_find_by_identifier", "with_slash") == sent
     assert str(info.value) == (
         "ESMIS's web server refused GET /api/v1/publication/findByIdentifier/"
-        "Market%20and%20Trade%20Economics%20Division%2FFDS with HTTP 404: it does not "
+        "Market and Trade Economics Division/FDS with HTTP 404: it does not "
         "accept an encoded slash (%2F) in a path, so a value carrying '/' cannot be looked "
         "up. Pass another of the publication's identifiers, as list_publications (over MCP, "
         "the tool usda_esmis_list_publications) lists them: every publication but 654 has one "
@@ -580,7 +580,10 @@ def test_classify_keys_the_slash_refusal_on_both_sides() -> None:
     )
     error = classify(refused_acronym)
     assert isinstance(error, InvalidRequestError)
-    assert "GET /api/v1/agency/findByAcronym/AMS%2FDA with HTTP 404" in str(error)
+    assert "GET /api/v1/agency/findByAcronym/AMS/DA with HTTP 404" in str(error)
+    assert str(error).startswith(
+        f"ESMIS's web server refused {request_description(refused_acronym)}"
+    )
 
 
 async def test_publication_search(replay_fixture: ReplayFixture) -> None:
