@@ -4,6 +4,163 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (pre-1.0: breaking changes bump the minor).
 
+## [0.4.0] - 2026-11-28
+
+### Added
+
+- `xippios.usda.esmis.params` exports `AGENCIES`, the packaged agency table's acronyms with
+  their titles, which `list_publications` checks an `agency_acronym` against and every answer
+  that holds a release or a publication names its agencies by in `meta.names`, and `PACKAGE`,
+  the package whose `reference/` holds the packaged tables. `PACKAGED_LISTS` names the two
+  tables, `agency` and `publication`, where it named none.
+  (https://github.com/xippios/sdk-usda-esmis/pull/64)
+- `list_releases` answers an identifier that ESMIS counts no release for with the empty list,
+  `meta.total` 0 and a note in `meta.notes` that says so and names `search_publications`.
+  A date filter that keeps no release writes no note, since upstream counted the releases.
+  (sdk-core ADR-0061, https://github.com/xippios/sdk-usda-esmis/issues/59)
+- Every answer that holds a release or a publication names its agencies by their titles in
+  `meta.names`, `{"agency_acronym": {"WAOB": "World Agricultural Outlook Board"}}`, by the
+  packaged agency list, and `list_publications(agency_acronym=...)` names the acronym asked
+  for, also where no row matches. An acronym the list lacks is left out of the names and
+  said in `meta.notes`. (https://github.com/xippios/sdk-core/issues/478)
+- `usda_esmis_list_publications` takes `offset`, the rows of a cut answer already shown,
+  and answers the rows after them from the packaged table. The note of every page but the
+  last names the `offset` to continue with, so a caller reads the whole table, or the
+  2,008 publications of `AMS`, in further calls. (https://github.com/xippios/sdk-usda-esmis/issues/34)
+- The client keeps upstream's answers in core's response cache for 300 seconds, every
+  path: a second call of a task within that time sends no request, and its
+  `meta.retrieved_at` is the time the first answer was stored. A file that
+  `download_release_file` streams is never kept. (sdk-core ADR-0061,
+  https://github.com/xippios/sdk-core/issues/479)
+- `list_recent_releases` names in `meta.notes` the rule that ended its walk: the first page
+  whose newest release is dated more than 14 days before `since`, or the catalog's last
+  page. (https://github.com/xippios/sdk-core/issues/478, https://github.com/xippios/sdk-usda-esmis/issues/29)
+
+### Changed
+
+- The text of `format` of `download_release_file` says that it takes the file ESMIS lists
+  first, an original or a revision such as release 95622's `R1wasde-07-11-2013.pdf`, and
+  that `name` reaches the others. (https://github.com/xippios/sdk-usda-esmis/issues/77)
+- The description of `usda_esmis_get_release` gives a file's formats as examples, `"doc"`
+  and `"asc"` among them, where it named five as the whole list, and says that an original
+  or a revised file of one format can be listed first.
+  (https://github.com/xippios/sdk-usda-esmis/issues/76)
+- The descriptions of `usda_esmis_list_agencies`, `usda_esmis_search_publications` and
+  `usda_esmis_list_releases` date no list of ESMIS by the day it was read, and the package's
+  docstrings, its README and its `CLAUDE.md` cite the note of `docs/upstream/OBSERVED.md`
+  that holds each probe by its heading. A test of the package holds that no probe stands
+  outside the notes. (https://github.com/xippios/sdk-usda-esmis/issues/75)
+- The README's `## Scope` states what of ESMIS the package wraps: seven of the twelve
+  operations of its OpenAPI document, with every documented parameter an argument of a
+  task but `page` of `esmis_api_publication_findAll`, whose table is packaged whole, and
+  the five operations without a task, each named with its public issue. The description
+  of `list_recent_releases` names ESMIS's test releases, which it returns as listed, and
+  `docs/upstream/OBSERVED.md` notes them with ESMIS's own cache headers, each note with
+  its probe. (sdk-core ADR-0060, https://github.com/xippios/sdk-usda-esmis/issues/32,
+  https://github.com/xippios/sdk-usda-esmis/issues/59)
+- The entry point's usage line and its error prefix name the command,
+  `xippios-usda-esmis-mcp`, where they named the server, and the help of `--allow-remote`
+  is reworded, as xippios-core 0.4.0 has them since this package's 0.3.0, whose notes left
+  the change out. That release's move of the core bound to `~=0.4.0` was a breaking change.
+  (https://github.com/xippios/sdk-core/issues/167, https://github.com/xippios/sdk-usda-esmis/issues/56)
+- The nightly live run compares the packaged agency table with the list ESMIS serves now
+  by core's comparison, and sends no probe of the base URL. The publication table, 101
+  requests a fetch, is held by the reference refresh before each release. Both refresh
+  scripts run on core's frames, the snapshot fetched through core's client, and the
+  reference refresh sends each of its requests once.
+  (https://github.com/xippios/sdk-usda-esmis/issues/36, https://github.com/xippios/sdk-usda-esmis/issues/37, https://github.com/xippios/sdk-usda-esmis/issues/38)
+- Every refusal of a call as given says `Nothing was sent.` after its first sentence, the
+  MCP adapter's refusal of an argument among them: an empty `query`, a `since` after
+  `until`, a walk from a `since` before 2025-09-12, an `agency_acronym` the packaged list
+  lacks, now checked by core's `check`, and a bad `dest`, now checked by core's
+  `check_dest`. `download_release_file` refuses a call with neither `format` nor `name`
+  before it looks the release up, and a choice the release cannot serve says that the
+  release was read and no file requested. The refusals' classes are unchanged.
+  (https://github.com/xippios/sdk-core/issues/481, https://github.com/xippios/sdk-usda-esmis/issues/33)
+- `meta.retrieved_at` of every task that asks upstream is the client's time of the answer,
+  the oldest where a walk reads several pages and the older of the release lookup's and the
+  file's for `download_release_file`, where it read the time the answer was built.
+  (https://github.com/xippios/sdk-core/issues/479, https://github.com/xippios/sdk-usda-esmis/issues/42,
+  https://github.com/xippios/sdk-usda-esmis/issues/73)
+- The descriptions of `usda_esmis_list_releases` and `usda_esmis_list_recent_releases` are
+  their tasks' docstrings before `Args:`, each under 1,000 characters, and those of the three
+  walking tools state the most requests a call spends, retries counted, as
+  `download_release_file`'s docstring does. The text of each argument stands in the tool's
+  input schema. (https://github.com/xippios/sdk-core/issues/485)
+
+### Fixed
+
+- `list_releases` with `since` returns every release that ESMIS lists from `since` on, where
+  its walk ended at the first page whose oldest release was dated before `since` and missed
+  the releases of the pages after it: on WASDE's recorded pages a walk from 2015-10-01
+  returned 97 of the 135 releases dated from then on. The walk now ends after the first page
+  whose newest release is dated before `since`, so it reads one page past the last release
+  it keeps, and a walk of WASDE's releases from a `since` before 1982-02-12 is refused after
+  its 24 pages, naming `page`. (https://github.com/xippios/sdk-usda-esmis/issues/67)
+- The refusal of an identifier that holds a `/` names `list_publications`, which lists a
+  publication's other identifiers, where it offered a lookup by id that no task has. It and
+  the docstrings say that every publication but 654 has an identifier without a `/`, and it
+  names its request by method and path as core's messages do.
+  (https://github.com/xippios/sdk-usda-esmis/issues/26, https://github.com/xippios/sdk-usda-esmis/issues/74)
+- A walk of pages keeps a release or a publication that two pages list once, as a release
+  catalogued during the walk shifts the pages.
+  (https://github.com/xippios/sdk-usda-esmis/issues/27)
+
+### Removed
+
+- `xippios.usda.esmis._client` no longer declares `API_KEY_ENV`, a key variable that no
+  code read: the API is keyless, and `ENV_VARS` names what a host sets, nothing.
+  (https://github.com/xippios/sdk-template/issues/300)
+- `xippios.usda.esmis.errors` and `xippios.usda.esmis.enums` are removed: each held the
+  template's empty `__all__` and no class or enum, since the package refuses with core's
+  errors and generates no enum from its two tables.
+  (https://github.com/xippios/sdk-template/issues/300)
+
+### Breaking
+
+- `list_releases`, `list_recent_releases` and `search_publications` refuse a page whose
+  pager states another size than 25 with `InvalidRequestError` and return nothing, where
+  their walks counted offsets in pages of 25 whatever the pager said. The refusal names the
+  request that was sent and `page`, which reads one page as upstream pages it.
+  (https://github.com/xippios/sdk-usda-esmis/issues/27, https://github.com/xippios/sdk-usda-esmis/issues/74)
+- `get_publication` refuses an identifier that two publications share with
+  `InvalidRequestError`, naming both ids and `search_publications`, where it returned the
+  first that ESMIS answered and dropped the other. 94 identifiers of the packaged table
+  belong to two publications each, `AMS_1045` among them.
+  (https://github.com/xippios/sdk-usda-esmis/issues/25)
+- What identifies a record stays positional and every other argument is keyword-only:
+  `list_publications(*, search=None, agency_acronym=None)`, `search_publications(query, *,
+  page=None)`, `list_releases(publication_identifier, *, since=None, until=None, page=None)`,
+  `list_recent_releases(*, since=None, until=None, page=None)` and
+  `download_release_file(release_id, *, dest, format=None, name=None)`, whose `dest` is
+  required. A call that passes one of them by position raises `TypeError` before any request,
+  and over MCP and HTTP nothing changes. (sdk-core ADR-0061, https://github.com/xippios/sdk-usda-esmis/issues/59)
+- `list_release_files` and its tool `usda_esmis_list_release_files` are removed: `get_release`
+  answers the same release from the same request, its `files` holding each file's URL, and
+  `Release.release_files()` reads their names and formats in Python. An unknown release id
+  raises `NotFoundError` as before. (sdk-core ADR-0061, https://github.com/xippios/sdk-usda-esmis/issues/57)
+- The package depends on `xippios-core~=0.5.0`, its extras likewise, is updated to
+  sdk-template v0.5.0 and applies conventions 1.30.
+  (https://github.com/xippios/sdk-usda-esmis/issues/59)
+- `get_latest_release` and its tool `usda_esmis_get_latest_release` are removed, by the
+  boundary of a source package: a task that picks the latest release for its caller leaves.
+  The same release is the first row of `list_releases(publication_identifier, page=0)`,
+  a page that ESMIS lists latest first, one request as before. (sdk-core ADR-0060,
+  https://github.com/xippios/sdk-core/issues/474)
+- `list_releases`, `list_recent_releases` and `search_publications` walk at most 24 pages
+  without `page`, 24 requests and 96 attempts with the client's retries, in Python and over
+  MCP alike, and a walk that needs more is refused with `InvalidRequestError` and returns
+  nothing, naming upstream's count, the bound, the requests sent, the page reached and
+  `page`. No walk sends a request at or past upstream's count. `list_releases("wasde")`
+  without `since`, WASDE's 703 releases on 29 pages, is refused after its first request
+  where it walked every page, and `list_recent_releases` without `since`, or with `until`
+  alone, is refused after one request where it was refused before any. (sdk-core ADR-0034,
+  https://github.com/xippios/sdk-core/issues/480, https://github.com/xippios/sdk-usda-esmis/issues/28)
+- The endpoint wrappers under `xippios.usda.esmis.api` return core's `Answer`, the parsed
+  model as its `payload` beside `retrieved_at`, the time the client retrieved it, in place
+  of the bare model, so a caller of a wrapper reads `.payload`. The tasks' answers keep
+  their shape. (https://github.com/xippios/sdk-core/issues/479)
+
 ## [0.3.0] - 2026-11-20
 
 ### Added
